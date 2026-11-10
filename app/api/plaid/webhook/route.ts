@@ -1,27 +1,63 @@
 import { NextResponse } from 'next/server';
 import { plaidClient } from '@/lib/plaid';
-import { getServiceSupabase } from '@/lib/supabase';
+import { getServiceSupabase } from '@/lib/supabase-admin';
 import { decryptToken } from '@/lib/crypto';
+import { syncAccountsForItem } from '@/lib/plaid/sync-accounts';
+import {
+  claimWebhookDelivery,
+  getWebhookIdempotencyKey,
+  verifyPlaidWebhook,
+  WebhookVerificationError,
+} from '@/lib/plaid/verify-webhook';
 
 export async function POST(req: Request) {
+  // 1. Raw body first — SHA-256 must match Plaid's exact bytes (whitespace-sensitive).
+  const rawBody = await req.text();
+
+  let requestBodySha256: string;
   try {
-    const payload = await req.json();
+    ({ requestBodySha256 } = await verifyPlaidWebhook(rawBody, req.headers));
+  } catch (err: unknown) {
+    const message = err instanceof WebhookVerificationError ? err.message : 'Invalid webhook signature';
+    console.warn(`[Plaid Webhook] Verification failed: ${message}`);
+    // Do not ACK forged / invalid requests — Plaid retries only help real deliveries.
+    return NextResponse.json({ error: 'Invalid webhook signature' }, { status: 401 });
+  }
+
+  const idempotencyKey = getWebhookIdempotencyKey(rawBody, requestBodySha256);
+  if (!claimWebhookDelivery(idempotencyKey)) {
+    console.log('[Plaid Webhook] Duplicate delivery within 24h window — ACK without re-sync');
+    return NextResponse.json({ status: 'ACKNOWLEDGED', duplicate: true });
+  }
+
+  try {
+    const payload = JSON.parse(rawBody) as {
+      webhook_type?: string;
+      webhook_code?: string;
+      item_id?: string;
+    };
     const { webhook_type, webhook_code, item_id } = payload;
+
+    if (!item_id) {
+      return NextResponse.json({ status: 'ACKNOWLEDGED' });
+    }
 
     console.log(`[Plaid Webhook] Ingested: type=${webhook_type}, code=${webhook_code}, item_id=${item_id}`);
 
-    // We specifically listen for transactions sync events
-    if (webhook_type === 'TRANSACTIONS' && (webhook_code === 'SYNC_UPDATES_AVAILABLE' || webhook_code === 'DEFAULT_UPDATE')) {
+    // Sync only — no Gemini / AI triage here (batch cron later).
+    if (
+      webhook_type === 'TRANSACTIONS' &&
+      (webhook_code === 'SYNC_UPDATES_AVAILABLE' || webhook_code === 'DEFAULT_UPDATE')
+    ) {
       const supabase = getServiceSupabase();
 
-      // 1. Fetch item credentials
       const { data: item, error: itemError } = await supabase
         .from('plaid_items')
-        .select('*')
+        .select('item_id, user_id, access_token, next_cursor')
         .eq('item_id', item_id)
         .single();
 
-      if (itemError || !item) {
+      if (itemError || !item?.user_id) {
         console.warn(`[Plaid Webhook] Item not found: ${item_id}`);
         return NextResponse.json({ message: 'Item not registered' }, { status: 404 });
       }
@@ -30,28 +66,15 @@ export async function POST(req: Request) {
       let cursor = item.next_cursor || undefined;
       let hasMore = true;
 
-      // 2. Refresh balances
       try {
-        const accRes = await plaidClient.accountsGet({ access_token: accessToken });
-        const accountsPayload = accRes.data.accounts.map((acc) => ({
-          plaid_account_id: acc.account_id,
-          account_name: acc.name,
-          account_type: acc.type,
-          account_subtype: acc.subtype || null,
-          current_balance: acc.balances.current || 0,
-          available_balance: acc.balances.available || null,
-          currency_code: acc.balances.iso_currency_code || 'USD',
-          updated_at: new Date().toISOString(),
-        }));
-
-        await supabase
-          .from('financial_accounts')
-          .upsert(accountsPayload, { onConflict: 'plaid_account_id' });
-      } catch (balErr: any) {
-        console.warn(`[Plaid Webhook] Balance update failed:`, balErr.message);
+        await syncAccountsForItem({ accessToken, userId: item.user_id });
+      } catch (balErr: unknown) {
+        console.warn(
+          `[Plaid Webhook] Balance update failed:`,
+          balErr instanceof Error ? balErr.message : balErr
+        );
       }
 
-      // 3. Process transaction delta stream
       while (hasMore) {
         const syncRes = await plaidClient.transactionsSync({
           access_token: accessToken,
@@ -64,6 +87,7 @@ export async function POST(req: Request) {
         cursor = data.next_cursor;
 
         const toUpsert = [...data.added, ...data.modified].map((tx) => ({
+          user_id: item.user_id,
           plaid_transaction_id: tx.transaction_id,
           account_id: tx.account_id,
           name: tx.name,
@@ -75,9 +99,7 @@ export async function POST(req: Request) {
         }));
 
         if (toUpsert.length > 0) {
-          await supabase
-            .from('transactions')
-            .upsert(toUpsert, { onConflict: 'plaid_transaction_id' });
+          await supabase.from('transactions').upsert(toUpsert, { onConflict: 'plaid_transaction_id' });
         }
 
         if (data.removed.length > 0) {
@@ -85,26 +107,27 @@ export async function POST(req: Request) {
           await supabase
             .from('transactions')
             .delete()
-            .in('plaid_transaction_id', removedIds);
+            .in('plaid_transaction_id', removedIds)
+            .eq('user_id', item.user_id);
         }
       }
 
-      // 4. Update cursor
       await supabase
         .from('plaid_items')
         .update({
           next_cursor: cursor,
           updated_at: new Date().toISOString(),
         })
-        .eq('item_id', item_id);
+        .eq('item_id', item_id)
+        .eq('user_id', item.user_id);
 
       console.log(`[Plaid Webhook] Sync complete for item: ${item_id}`);
     }
 
-    // Always acknowledge Plaid with 200 OK immediately
     return NextResponse.json({ status: 'ACKNOWLEDGED' });
-  } catch (err: any) {
-    console.error('[Plaid Webhook Error]:', err.message || err);
-    return NextResponse.json({ error: err.message }, { status: 500 });
+  } catch (err: unknown) {
+    // Post-verify transient failures: ACK so Plaid can retry a valid delivery.
+    console.error('[Plaid Webhook Error]:', err instanceof Error ? err.message : err);
+    return NextResponse.json({ status: 'ACKNOWLEDGED' });
   }
 }
