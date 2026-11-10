@@ -325,12 +325,12 @@ Stop. Do not continue into other issues. Finish only the acceptance criteria alr
 ## Progress tracker
 | Week | Day | Status |
 |------|-----|--------|
-| 1 | 1 Classifier | ☐ |
-| 1 | 2 Sync user_id | ☐ |
-| 1 | 3 Webhook verify | ☐ |
-| 1 | 4 Schema/RLS | ☐ |
-| 1 | 5a Signup gate | ☐ |
-| 1 | 5b Hardcode scrub | ☐ |
+| 1 | 1 Classifier | ☑ |
+| 1 | 2 Sync user_id | ☑ |
+| 1 | 3 Webhook verify | ☑ |
+| 1 | 4 Schema/RLS | ☑ |
+| 1 | 5a Signup gate | ☑ |
+| 1 | 5b Hardcode scrub | ☑ |
 | 2 | 1 Snapshots | ☐ |
 | 2 | 2 Classify | ☐ |
 | 2 | 3 Cursor sync | ☐ |
