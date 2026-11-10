@@ -1,6 +1,6 @@
 ﻿import { NextResponse } from 'next/server';
 import { GoogleGenAI } from '@google/genai';
-import { getServiceSupabase } from '@/lib/supabase';
+import { getServiceSupabase } from '@/lib/supabase-admin';
 import { createServerSupabaseClient } from '@/lib/supabase-server';
 
 export async function POST() {
@@ -19,11 +19,10 @@ export async function POST() {
 
     const supabase = getServiceSupabase();
 
-    // 1. Fetch live Accounts and recent Transactions strictly for this user
+    // 1. Fetch live Accounts, Manual Liabilities, and recent Transactions strictly for this user
     const { data: accounts } = await supabase.from('financial_accounts').select('*').eq('user_id', user.id);
+    const { data: manualAccounts } = await supabase.from('manual_accounts').select('*').eq('user_id', user.id);
     
-    // We can't filter transactions directly by user_id since they map to account_id.
-    // However, we only select transactions belonging to the user's accounts.
     const accountIds = accounts?.map(acc => acc.plaid_account_id) || [];
     let transactions: any[] = [];
     
@@ -41,7 +40,13 @@ export async function POST() {
       return NextResponse.json({ error: 'No account telemetry found to audit.' }, { status: 400 });
     }
 
-    // 2. Fetch User Profile, Pre-Program Baseline, Snapshots, and Upstream Paystub mapped to user_id
+    const aiOptimizedAccounts = accounts.map(acc => ({
+      account_name: acc.custom_name || acc.account_name,
+      account_type: acc.account_type,
+      current_balance: acc.current_balance
+    }));
+
+    // 2. Fetch Profile, Baseline, Snapshots, and Paystub telemetry
     const { data: profile } = await supabase.from('user_financial_profiles').select('*').eq('user_id', user.id).single();
     const { data: baseline } = await supabase.from('program_baselines').select('*').eq('user_id', user.id).single();
     const { data: historicalSnapshots } = await supabase
@@ -69,9 +74,10 @@ export async function POST() {
 
     const netLiquidity = liquidCapital - revolvingDebt;
 
+    // Total Fixed Liabilities (Secured Debt Service / Minimums)
+    const totalFixedLiabilitiesMonthly = manualAccounts?.reduce((sum, m) => sum + Number(m.minimum_payment || 0), 0) || 0;
+
     const txList = transactions || [];
-    
-    // Normalized Operational Burn Filter
     const nonOperationalKeywords = ['transfer', 'payment', 'credit card', 'deposit', 'wire', 'investment', 'payroll'];
 
     let operationalBurn = 0;
@@ -95,15 +101,19 @@ export async function POST() {
         }
       });
 
-    // 4. Compute Targets from Profile & Paystub
-    const grossSalary = profile?.annual_gross_salary ? Number(profile.annual_gross_salary) : 141300;
-    const monthlyWealthTarget = (grossSalary * 0.20) / 12;
-    const targetEFMonths = profile?.target_emergency_months || 6;
+    // 4. Brennan's Work-Backwards Waterfall Calculation
+    const grossSalary = profile?.annual_gross_salary != null ? Number(profile.annual_gross_salary) : null;
+    const grossMonthlyIncome = grossSalary != null ? grossSalary / 12 : null;
     
-    const emergencyFundCeiling = operationalBurn * targetEFMonths;
-
-    // Upstream payroll calculations
+    // Step 1: The 20% Gross Wealth Quota
+    const grossWealthQuotaMonthly = grossMonthlyIncome != null ? grossMonthlyIncome * 0.20 : null; 
+    
+    // Upstream Payroll & Protection Layers (Steps 2 & 3)
     let paystubMetrics: any = null;
+    let monthlyPayrollWealthContribution = 0;
+    let fixedHealthAndPayrollLeaksMonthly = 0;
+    let estimatedNetMonthlyInflow: number | null = null;
+
     if (latestPaystub) {
       const gross = Number(latestPaystub.gross_pay || 0);
       const totalTaxes =
@@ -111,73 +121,95 @@ export async function POST() {
         Number(latestPaystub.state_tax_withheld || 0) +
         Number(latestPaystub.fica_medicare_tax || 0);
       const effectiveTaxRate = gross > 0 ? (totalTaxes / gross) * 100 : 0;
-      const preTaxSheltered = Number(latestPaystub.pre_tax_401k || 0) + Number(latestPaystub.hsa_contribution || 0);
+      
+      const preTax401k = Number(latestPaystub.pre_tax_401k || 0);
+      const roth401k = Number(latestPaystub.post_tax_roth_401k || 0);
+      const hsa = Number(latestPaystub.hsa_contribution || 0);
+      const healthcare = Number(latestPaystub.healthcare_premiums || 0);
+      const otherDed = Number(latestPaystub.other_deductions || 0);
+
+      monthlyPayrollWealthContribution = (preTax401k + roth401k) * 2;
+      fixedHealthAndPayrollLeaksMonthly = (healthcare + hsa + otherDed) * 2;
+      estimatedNetMonthlyInflow = Number(latestPaystub.net_pay || 0) * 2; // normalized bi-weekly/semi-monthly
 
       paystubMetrics = {
         gross_pay: gross,
         net_pay: Number(latestPaystub.net_pay || 0),
-        total_taxes: totalTaxes,
         effective_tax_rate_pct: Number(effectiveTaxRate.toFixed(2)),
-        pre_tax_401k: Number(latestPaystub.pre_tax_401k || 0),
-        employer_401k_match: Number(latestPaystub.employer_401k_match || 0),
-        hsa_contribution: Number(latestPaystub.hsa_contribution || 0),
-        pre_tax_sheltered_total: preTaxSheltered,
+        pre_tax_401k: preTax401k,
+        post_tax_roth_401k: roth401k,
+        hsa_contribution: hsa,
+        healthcare_premiums: healthcare,
+        other_deductions: otherDed,
       };
     }
 
-    // 5. Construct BudgetDog Engine Prompt
+    // THE BRENNAN POST-WEALTH RESIDUAL CAP FORMULA:
+    // Net Inflow minus (Mandatory 20% Wealth Quota) minus (Fixed Debt Service) minus (Health & Protection Leaks)
+    const postWealthResidualCap =
+      estimatedNetMonthlyInflow != null && grossWealthQuotaMonthly != null
+        ? Math.max(
+            0,
+            estimatedNetMonthlyInflow -
+              grossWealthQuotaMonthly -
+              totalFixedLiabilitiesMonthly -
+              fixedHealthAndPayrollLeaksMonthly
+          )
+        : null;
+
+    const targetEFMonths = profile?.target_emergency_months || 6;
+    const emergencyFundCeiling = operationalBurn * targetEFMonths;
+    const fmtMoney = (n: number | null) => (n == null ? 'not set' : `$${n.toFixed(2)}`);
+
+    // 5. Construct Protocol Audit Payload
     const promptPayload = `
-You are the BudgetDog Financial Engine Auditor operating on the Brennan Schlagbaum financial blueprint.
-Your tone is blunt, uncompromising, math-first, and focused on building wealth through radical debt elimination and aggressive index fund investing.
+You are the Elite Capital Engine Auditor executing the strict "Work Backwards" Budgetdog (Brennan) Protocol.
+Your tone is blunt, uncompromising, analytical, and uncompromisingly disciplined. You enforce savings and debt destruction as absolute non-negotiable laws, treating variable lifestyle spending strictly as a dynamic residual.
 
-USER FINANCIAL PROFILE & BENCHMARKS:
-- Annual Gross Salary: $${grossSalary.toLocaleString()}
-- Target Retirement Age: ${profile?.target_retirement_age || 55}
-- Target Emergency Fund Months: ${targetEFMonths} Months
-- True Operational Monthly Burn (Excluding Transfers): $${operationalBurn.toFixed(2)}
-- 6-Month Emergency Fund Ceiling (Operational Burn * ${targetEFMonths}): $${emergencyFundCeiling.toFixed(2)}
-- Non-Operational Transfer Movement (Internal transfers/payments): $${transferMovement.toFixed(2)}
-- Brennan 20%+ Wealth Rule Monthly Quota: $${monthlyWealthTarget.toFixed(2)} / month
+BRENNAN PRIORITY HIERARCHY WATERFALL:
+1. MANDATORY 20% GROSS WEALTH QUOTA: ${fmtMoney(grossWealthQuotaMonthly)} / month (Automatically satisfied via automated payroll 401k contributions of ~$${monthlyPayrollWealthContribution.toFixed(2)}/mo + discretionary post-tax investments/debt payoff).
+2. PROTECTION, HEALTH & FIXED OBLIGATIONS:
+   - Fixed Debt Service (manual liabilities): $${totalFixedLiabilitiesMonthly.toFixed(2)} / month
+   - Health Premiums, HSA & Fixed Payroll Leaks: $${fixedHealthAndPayrollLeaksMonthly.toFixed(2)} / month
+3. EMERGENCY FUND FLOOR: 3 to 6 months fully funded in high-yield cash. (Current target ceiling: $${emergencyFundCeiling.toFixed(2)}).
+4. POST-WEALTH RESIDUAL SPENDING CAP (The Maximum Allowable Operational Burn): ${fmtMoney(postWealthResidualCap)} / month.
 
-UPSTREAM PAYROLL & TAX DEDUCTIONS TELEMETRY:
-${JSON.stringify(paystubMetrics || 'No paystub telemetry ingested yet.', null, 2)}
+CURRENT AUDIT TELEMETRY:
+- Estimated Net Monthly Inflow: ${fmtMoney(estimatedNetMonthlyInflow)}
+- Actual Trailing Operational Burn: $${operationalBurn.toFixed(2)}
+- Residual Variance (Deficit / Surplus): ${postWealthResidualCap == null ? 'not set' : `$${(postWealthResidualCap - operationalBurn).toFixed(2)}`}
+- Total Liquid Capital: $${liquidCapital.toFixed(2)}
+- Total Revolving Credit Debt: $${revolvingDebt.toFixed(2)}
 
-PRE-PROGRAM DAY-ZERO BASELINE:
-${JSON.stringify(baseline || 'No pre-program baseline established.', null, 2)}
+UPSTREAM PAYROLL & HEALTH DEDUCTIONS:
+${JSON.stringify(paystubMetrics || 'No paystub telemetry ingested.', null, 2)}
 
-CURRENT FINANCIAL TELEMETRY:
-- Total Liquid Capital (Checking/Savings): $${liquidCapital.toFixed(2)}
-- Total Revolving Debt (Credit Cards/Lines): $${revolvingDebt.toFixed(2)}
-- Net Immediate Liquidity: $${netLiquidity.toFixed(2)}
-- Operational Spending Distribution:
+ACTIVE ACCOUNT LEDGER:
+${JSON.stringify(aiOptimizedAccounts, null, 2)}
+
+OPERATIONAL SPENDING DISTRIBUTION (Plaid Categories):
 ${JSON.stringify(categoryBreakdown, null, 2)}
 
-HISTORICAL TELEMETRY SNAPSHOTS:
-${JSON.stringify(historicalSnapshots || [], null, 2)}
+HISTORICAL SNAPSHOTS & BASELINE:
+- Baseline: ${JSON.stringify(baseline || 'None')}
+- Snapshots: ${JSON.stringify(historicalSnapshots || [])}
 
-BUDGETDOG ORDER OF OPERATIONS TO AUDIT AGAINST:
-1. Mini Emergency Fund ($1,000 - $2,500)
-2. Eliminate Non-Mortgage Debt (0% tolerance for high-interest/consumer debt)
-3. 3-6 Months Fully Funded Emergency Fund in HYSA (Flag any "Cash Drag" if idle cash sits above the $${emergencyFundCeiling.toFixed(2)} ceiling)
-4. 20%+ Wealth Building Rule (Tax-advantaged pipeline -> Low-cost Index Funds like VOO/VTI)
-5. Early Mortgage Payoff / Generational Wealth
+Generate a structured forensic audit report following the exact Brennan Order of Operations with these section headers:
 
-Generate a structured forensic audit report with these exact section headers:
+**1. Work-Backwards Waterfall & Residual Audit**
+Evaluate whether current operational burn ($${operationalBurn.toFixed(2)}) strictly respects the Post-Wealth Residual Cap (${fmtMoney(postWealthResidualCap)}). Expose any month where lifestyle spending invaded capital reserved for the 20% wealth quota or fixed protection layers. If salary/paystub data is "not set", say so and avoid inventing numbers.
 
-**1. BudgetDog Phase Diagnosis & Net Position**
-Identify which exact step of the order of operations the user is currently on based on liquid capital vs revolving debt. Compare against their pre-program baseline debt load.
-
-**2. Upstream Tax Drag & Deduction Audit**
-Audit the user's paystub efficiency. Analyze effective tax rate drag, verify whether employer 401(k) match is being maximized, and evaluate pre-tax optimization (401k/HSA sheltering).
+**2. Upstream Protection & Tax Drag Audit**
+Audit health/HSA sheltering, effective tax rate drag, and fixed payroll leaks against the protection layer of the hierarchy.
 
 **3. Downstream Cash Drag & Leakage Audit**
-Audit spending categories against the pre-program baseline. Call out lifestyle creep based strictly on operational burn ($${operationalBurn.toFixed(2)}), distinguishing it from non-operational transfer volume ($${transferMovement.toFixed(2)}). Quantify true idle cash sitting above the $${emergencyFundCeiling.toFixed(2)} ceiling.
+Audit Plaid spending categories against the residual cap. Differentiate operational lifestyle burn from non-operational transfer volume ($${transferMovement.toFixed(2)}), and flag cash drag above the emergency fund ceiling ($${emergencyFundCeiling.toFixed(2)}).
 
 **4. Three Tactical Directives**
-Provide 3 ranked, concrete action steps with exact dollar moves to hit their $${monthlyWealthTarget.toFixed(2)}/mo Step 4 investing quota and optimize tax sheltering.
+Provide 3 ranked, concrete action steps with exact dollar moves to lock in the Post-Wealth Residual Cap and accelerate debt/investing velocity according to the protocol.
 
 **5. Longitudinal Trend & Accountability Score**
-Evaluate trajectory compared to historical snapshots and pre-program baseline. Grade their behavioral discipline (A to F) with a blunt rationale.
+Evaluate trajectory against historical telemetry. Grade behavioral discipline (A to F) with a blunt rationale.
 `;
 
     const ai = new GoogleGenAI({ apiKey });

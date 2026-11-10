@@ -1,6 +1,7 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import { supabase } from '@/lib/supabase';
 
 interface CapitalSimulatorProps {
   initialLiquid: number;
@@ -20,20 +21,59 @@ export default function CapitalSimulator({
   targetYears = 20,
 }: CapitalSimulatorProps) {
   const [isExecuted, setIsExecuted] = useState(false);
+  const [windfalls, setWindfalls] = useState<Array<{ source_name: string; source_type: string; expected_date: string; gross_amount: number; tax_drag_pct?: number }>>([]);
 
-  // Deterministic calculations
+  const fetchWindfalls = async () => {
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session?.user?.id) return;
+    const { data } = await supabase
+      .from('capital_windfalls')
+      .select('*')
+      .eq('user_id', session.user.id)
+      .eq('status', 'PENDING')
+      .order('expected_date', { ascending: true });
+    if (data) setWindfalls(data);
+  };
+
+  useEffect(() => {
+    fetchWindfalls();
+  }, []);
+
+  // Sample windfall seeder for simulator demos (generic, not employer-specific)
+  const seedTestWindfall = async () => {
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session?.user?.id) return;
+    const sampleDate = new Date();
+    sampleDate.setMonth(sampleDate.getMonth() + 1);
+    await supabase.from('capital_windfalls').insert({
+      user_id: session.user.id,
+      source_name: 'Sample equity vest',
+      source_type: 'RSU',
+      expected_date: sampleDate.toISOString().split('T')[0],
+      gross_amount: 10000,
+      tax_drag_pct: 0.3215,
+      status: 'PENDING'
+    });
+    fetchWindfalls();
+  };
+
+  const totalNetWindfalls = windfalls.reduce((sum, w) => {
+    return sum + (Number(w.gross_amount) * (1 - Number(w.tax_drag_pct || 0)));
+  }, 0);
+
+  const effectiveLiquid = initialLiquid + (isExecuted ? totalNetWindfalls : 0);
+
+  // Deterministic calculations powered by scalable liquidity & windfalls
   const efCeiling = Number((monthlyBurn * emergencyMonths).toFixed(2));
-  const debtToClear = Math.min(initialLiquid, initialDebt);
-  const liquidAfterDebt = Math.max(0, initialLiquid - debtToClear);
+  const debtToClear = Math.min(effectiveLiquid, initialDebt);
+  const liquidAfterDebt = Math.max(0, effectiveLiquid - debtToClear);
   const remainingDebt = Math.max(0, initialDebt - debtToClear);
 
   const emergencyReserve = Math.min(liquidAfterDebt, efCeiling);
   const surplusCapital = Math.max(0, liquidAfterDebt - emergencyReserve);
 
   // Compound growth calculations over targetYears at annualGrowthRate
-  // Formula: FV = PV * (1 + r)^t
   const futureValueDeployed = surplusCapital * Math.pow(1 + annualGrowthRate, targetYears);
-  // Idle cash compounding at a nominal 1.5% checking rate
   const futureValueIdle = surplusCapital * Math.pow(1 + 0.015, targetYears);
   const opportunityCost = futureValueDeployed - futureValueIdle;
 
@@ -57,6 +97,46 @@ export default function CapitalSimulator({
         >
           {isExecuted ? 'Reset to Current Telemetry' : 'Simulate Order of Operations'}
         </button>
+      </div>
+
+      {/* Scheduled Windfalls Accelerator Panel */}
+      <div className="bg-slate-950 border border-slate-800 rounded-lg p-4 space-y-3">
+        <div className="flex justify-between items-center text-xs font-mono uppercase text-emerald-400">
+          <span>Scheduled Capital Windfalls (+${totalNetWindfalls.toLocaleString('en-US', { minimumFractionDigits: 2 })} Net)</span>
+          <div className="flex items-center gap-3">
+            <span>{windfalls.length} Active Inflows</span>
+            <button
+              onClick={seedTestWindfall}
+              className="bg-indigo-600 hover:bg-indigo-500 text-white px-2.5 py-1 rounded text-[10px] font-semibold transition"
+            >
+              + Add sample windfall
+            </button>
+          </div>
+        </div>
+
+        {windfalls.length === 0 ? (
+          <div className="border border-dashed border-slate-800 rounded p-4 text-center text-slate-500 text-xs">
+            No scheduled windfalls ingested. Click <span className="text-indigo-400 font-semibold">&quot;+ Add sample windfall&quot;</span> above to simulate an equity vest or bonus injection.
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2">
+            {windfalls.map((w, idx) => {
+              const netYield = Number(w.gross_amount) * (1 - Number(w.tax_drag_pct || 0));
+              return (
+                <div key={idx} className="p-2.5 bg-slate-900 border border-slate-800 rounded text-xs space-y-1">
+                  <div className="flex justify-between">
+                    <span className="text-indigo-400 font-semibold">{w.source_name}</span>
+                    <span className="text-slate-400 text-[10px]">{w.expected_date}</span>
+                  </div>
+                  <div className="flex justify-between font-mono">
+                    <span className="text-slate-400">Net Yield:</span>
+                    <span className="text-emerald-400 font-bold">${netYield.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
       </div>
 
       {/* Execution Cascade Cards */}

@@ -58,23 +58,15 @@
 - [x] Sign out works
 - [x] Committed
 ---
-### Day 5b — Scrub personal hardcodes (new Agent chat) - START HERE
-**Ask**
-Grep budgetdog-app for: 141700, 49000, Corvette, Seed Test RSU, amazon_rsu. List file:line and whether each should become profile-driven or removed. Do not edit.
-
-
-**Agent**
-P0: Remove author-specific hardcodes for multi-user. Replace with profile-driven values or safe null/"not set" behavior:
-
-141700 salary fallbacks (audit + audit/chat)
-amazon_rsu / 49000 / Corvette / Seed Test RSU copy Keep financial math; remove personal narrative. Touch only files that contain these strings.
+### Day 5b — Scrub personal hardcodes
+> Completed in git: salary/Corvette/RSU/seed hardcodes scrubbed; legacy table `amazon_rsu_schedule` name retained.
 
 **Done when**
-- [ ] Grep is clean (or only generic examples remain)
-- [ ] Fresh user never sees your salary/Corvette/RSU seed
-- [ ] Committed
+- [x] Grep is clean (or only generic examples remain)
+- [x] Fresh user never sees your salary/Corvette/RSU seed
+- [x] Committed
 ---
-### Week 1 weekend — Manual isolation test (no Agent)
+### Week 1 weekend — Manual isolation test (no Agent) - START HERE
 - [ ] Two Supabase users
 - [ ] User A data invisible to User B (SQL + UI)
 - [ ] Classifier as A does not pull B’s txs
