@@ -7,12 +7,16 @@ import { useRouter } from 'next/navigation';
 export default function LoginPage() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [inviteCode, setInviteCode] = useState('');
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const router = useRouter();
-  
+
   // Initialize the SSR-compatible browser client
   const supabase = createBrowserSupabaseClient();
+
+  // Client bundles only see NEXT_PUBLIC_*. Set NEXT_PUBLIC_INVITE_CODE (same value as INVITE_CODE).
+  const expectedInvite = (process.env.NEXT_PUBLIC_INVITE_CODE || '').trim();
 
   async function handleLogin(e: React.FormEvent) {
     e.preventDefault();
@@ -37,6 +41,18 @@ export default function LoginPage() {
     e.preventDefault();
     setLoading(true);
     setMessage(null);
+
+    if (!expectedInvite) {
+      setMessage('Sign-up is disabled: NEXT_PUBLIC_INVITE_CODE is not configured.');
+      setLoading(false);
+      return;
+    }
+
+    if (inviteCode.trim() !== expectedInvite) {
+      setMessage('Invalid or missing invite code.');
+      setLoading(false);
+      return;
+    }
 
     const { error } = await supabase.auth.signUp({
       email,
@@ -78,6 +94,19 @@ export default function LoginPage() {
               onChange={(e) => setPassword(e.target.value)}
               className="w-full mt-1 bg-zinc-950 border border-zinc-800 rounded-lg p-3 text-zinc-100 focus:outline-none focus:border-indigo-500"
               placeholder="••••••••"
+            />
+          </div>
+          <div>
+            <label className="text-xs font-semibold text-zinc-400 uppercase tracking-wider">
+              Invite code <span className="text-zinc-600 normal-case">(required for Sign Up)</span>
+            </label>
+            <input
+              type="text"
+              value={inviteCode}
+              onChange={(e) => setInviteCode(e.target.value)}
+              className="w-full mt-1 bg-zinc-950 border border-zinc-800 rounded-lg p-3 text-zinc-100 focus:outline-none focus:border-indigo-500"
+              placeholder="Invite code"
+              autoComplete="off"
             />
           </div>
 
