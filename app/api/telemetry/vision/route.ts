@@ -3,6 +3,8 @@ import { GoogleGenAI } from '@google/genai';
 import { getServiceSupabase } from '@/lib/supabase-admin';
 import { createServerSupabaseClient } from '@/lib/supabase-server';
 import { checkRateLimit, rateLimitResponse } from '@/lib/http/rate-limit';
+import { requireActiveSubscription } from '@/lib/auth/require-entitlement';
+import { toErrorResponse } from '@/lib/http/api-error';
 
 function calculateFederalMarginalBracket(
   annualGross: number,
@@ -54,6 +56,8 @@ export async function POST(request: Request) {
     if (authError || !user) {
       return NextResponse.json({ error: 'Unauthorized session.' }, { status: 401 });
     }
+
+    await requireActiveSubscription(user);
 
     const limited = checkRateLimit(`vision:${user.id}`, 10, 60_000);
     if (!limited.ok) return rateLimitResponse(limited.retryAfterSec);
@@ -231,11 +235,7 @@ Return ONLY valid JSON with these exact keys. If a date field is missing, defaul
       record: savedRecord,
       deduplicated: Boolean(existingStub?.id),
     });
-  } catch (error: any) {
-    console.error('Paystub Vision API Error:', error?.message || error);
-    return NextResponse.json(
-      { error: error?.message || 'Failed to process paystub vision upload.' },
-      { status: 500 }
-    );
+  } catch (error: unknown) {
+    return toErrorResponse(error, 'telemetry-vision');
   }
 }

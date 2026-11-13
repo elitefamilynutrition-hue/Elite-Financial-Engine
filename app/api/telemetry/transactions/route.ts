@@ -3,6 +3,8 @@ import { GoogleGenAI } from '@google/genai';
 import { createServerSupabaseClient } from '@/lib/supabase-server';
 import { getServiceSupabase } from '@/lib/supabase-admin';
 import { checkRateLimit, rateLimitResponse } from '@/lib/http/rate-limit';
+import { requireActiveSubscription } from '@/lib/auth/require-entitlement';
+import { toErrorResponse } from '@/lib/http/api-error';
 
 export async function POST(request: Request) {
   try {
@@ -12,6 +14,8 @@ export async function POST(request: Request) {
     if (authError || !user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
+
+    await requireActiveSubscription(user);
 
     const limited = checkRateLimit(`tx-classify:${user.id}`, 10, 60_000);
     if (!limited.ok) return rateLimitResponse(limited.retryAfterSec);
@@ -143,8 +147,7 @@ ${JSON.stringify(txPayload, null, 2)}
       classified_count: classifications.length
     });
 
-  } catch (error: any) {
-    console.error('Transaction Classification Error:', error?.message || error);
-    return NextResponse.json({ error: error?.message || 'Classification failed.' }, { status: 500 });
+  } catch (error: unknown) {
+    return toErrorResponse(error, 'telemetry-transactions');
   }
 }

@@ -37,11 +37,28 @@ function DashboardContent() {
   const [needsOnboarding, setNeedsOnboarding] = useState(false);
   const [userId, setUserId] = useState<string>('');
   const [isSnapshotting, setIsSnapshotting] = useState(false);
+  const [isUpgrading, setIsUpgrading] = useState(false);
 
   const handleSignOut = async () => {
     await supabase.auth.signOut();
     router.push('/login');
     router.refresh();
+  };
+
+  const startCheckout = async () => {
+    setIsUpgrading(true);
+    try {
+      const res = await fetch('/api/billing/checkout', { method: 'POST' });
+      const data = await res.json();
+      if (!res.ok || !data.url) {
+        throw new Error(data.error || 'Checkout failed');
+      }
+      window.location.href = data.url;
+    } catch (err: unknown) {
+      console.error('Upgrade checkout failed:', err);
+      alert(err instanceof Error ? err.message : 'Unable to start checkout.');
+      setIsUpgrading(false);
+    }
   };
 
   useEffect(() => {
@@ -254,6 +271,13 @@ function DashboardContent() {
             <p className="text-zinc-400 text-sm">Automated sync and intelligent portfolio telemetry</p>
           </div>
           <div className="flex items-center gap-3 flex-wrap justify-end">
+            <button
+              onClick={startCheckout}
+              disabled={isUpgrading}
+              className="bg-amber-600 hover:bg-amber-500 disabled:opacity-50 text-white font-semibold py-2.5 px-4 rounded-lg transition text-sm"
+            >
+              {isUpgrading ? 'Redirecting…' : 'Upgrade'}
+            </button>
             <button
               onClick={handleSignOut}
               className="bg-zinc-950 hover:bg-zinc-800 border border-zinc-700 text-zinc-400 hover:text-zinc-200 font-semibold py-2.5 px-4 rounded-lg transition text-sm"

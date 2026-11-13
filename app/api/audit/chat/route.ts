@@ -2,6 +2,8 @@ import { NextResponse } from 'next/server';
 import { createServerSupabaseClient } from '@/lib/supabase-server';
 import { GoogleGenAI } from '@google/genai';
 import { checkRateLimit, rateLimitResponse } from '@/lib/http/rate-limit';
+import { requireActiveSubscription } from '@/lib/auth/require-entitlement';
+import { toErrorResponse } from '@/lib/http/api-error';
 
 const MAX_CHAT_HISTORY = 40;
 
@@ -13,6 +15,8 @@ export async function POST(request: Request) {
     if (authError || !user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
+
+    await requireActiveSubscription(user);
 
     const limited = checkRateLimit(`audit-chat:${user.id}`, 20, 60_000);
     if (!limited.ok) return rateLimitResponse(limited.retryAfterSec);
@@ -112,8 +116,7 @@ OPERATOR TELEMETRY CONTEXT:
     }
 
     return NextResponse.json({ status: 'SUCCESS', reply: responseText });
-  } catch (error: any) {
-    console.error('Audit Chat API Error:', error?.message || error);
-    return NextResponse.json({ error: error?.message || 'Failed to process audit chat.' }, { status: 500 });
+  } catch (error: unknown) {
+    return toErrorResponse(error, 'audit-chat');
   }
 }

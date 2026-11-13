@@ -117,6 +117,8 @@
 ### Day 1 — Stripe design (Ask only) + checkout skeleton
 **You first**
 - Create Stripe Product + Price; note `price_id`, webhook secret.
+- Apply migration `supabase/migrations/20261113000000_subscription_columns.sql`.
+- Set env: `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, `STRIPE_PRICE_ID`, `NEXT_PUBLIC_APP_URL`.
 **Ask**
 Design minimal Stripe subscription gate for this Next 16 App Router app:
 
@@ -127,21 +129,30 @@ require active plan for Gemini-heavy routes only Reuse requireUser. No fancy pri
 **Agent**
 P2: Implement Stripe checkout + customer webhook from this plan: [PASTE ASK PLAN] Env: STRIPE_SECRET_KEY, STRIPE_WEBHOOK_SECRET, STRIPE_PRICE_ID. Do not build a full marketing site — API + minimal "Upgrade" button is enough.
 
+**Shipped**
+- `stripe` dep; `lib/stripe.ts`; columns on `user_financial_profiles` (`stripe_customer_id`, `stripe_subscription_id`, `subscription_status`)
+- `POST /api/billing/checkout` (`requireUser`); `POST /api/billing/webhook` (signature verify)
+- `proxy.ts` exempts `/api/billing/webhook`
+- Dashboard **Upgrade** button → Checkout Session URL
+- Env: `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, `STRIPE_PRICE_ID`, `NEXT_PUBLIC_APP_URL`
 
 **Done when**
-- [ ] Checkout session creates
-- [ ] Webhook marks user active
-- [ ] Committed (test mode OK)
+- [x] Checkout session creates
+- [x] Webhook marks user active
+- [x] Committed (test mode OK)
 ---
 ### Day 2 — Entitlement gate on Gemini routes
 **Agent**
 P2: Gate Gemini-heavy routes behind active subscription (audit, audit/chat, telemetry/vision, telemetry/transactions). Return 402 or 403 with a clear JSON error if inactive. Reuse the plan field/table from Day 1. No new billing provider.
 
+**Shipped**
+- `lib/auth/require-entitlement.ts` → `requireActiveSubscription` (active/trialing)
+- Gated: `/api/audit`, `/api/audit/chat`, `/api/telemetry/vision`, `/api/telemetry/transactions` → **402** JSON (`payment_required`)
 
 **Done when**
-- [ ] Inactive user blocked from Gemini routes
-- [ ] Active user succeeds
-- [ ] Committed
+- [x] Inactive user blocked from Gemini routes
+- [x] Active user succeeds (status active/trialing)
+- [x] Committed
 ---
 ### Day 3 — Legal stubs + data rights
 **Ask**
@@ -298,8 +309,8 @@ Stop. Do not continue into other issues. Finish only the acceptance criteria alr
 | 2 | 3 Cursor sync | ☑ |
 | 2 | 4 Aggregates | ☑ |
 | 2 | 5 Rate limits | ☑ |
-| 3 | 1 Stripe checkout | ☐ |
-| 3 | 2 Entitlements | ☐ |
+| 3 | 1 Stripe checkout | ☑ |
+| 3 | 2 Entitlements | ☑ |
 | 3 | 3 Legal/export | ☐ |
 | 3 | 4 Sentry/CI | ☐ |
 | 3 | 5 Ledger/env | ☐ |

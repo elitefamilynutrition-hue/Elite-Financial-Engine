@@ -32,11 +32,12 @@ export async function proxy(request: NextRequest) {
   } = await supabase.auth.getUser();
 
   // If there is no active user session, and they are trying to access a protected route, redirect to login.
-  // We exclude /login and /api/plaid/webhook (since Plaid servers don't log in).
+  // Exclude /login and provider webhooks (Plaid/Stripe have no session cookies).
   if (
     !user &&
     !request.nextUrl.pathname.startsWith('/login') &&
-    !request.nextUrl.pathname.startsWith('/api/plaid/webhook')
+    !request.nextUrl.pathname.startsWith('/api/plaid/webhook') &&
+    !request.nextUrl.pathname.startsWith('/api/billing/webhook')
   ) {
     const url = request.nextUrl.clone();
     url.pathname = '/login';

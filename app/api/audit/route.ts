@@ -3,6 +3,8 @@ import { GoogleGenAI } from '@google/genai';
 import { getServiceSupabase } from '@/lib/supabase-admin';
 import { createServerSupabaseClient } from '@/lib/supabase-server';
 import { checkRateLimit, rateLimitResponse } from '@/lib/http/rate-limit';
+import { requireActiveSubscription } from '@/lib/auth/require-entitlement';
+import { toErrorResponse } from '@/lib/http/api-error';
 
 export async function POST() {
   try {
@@ -12,6 +14,8 @@ export async function POST() {
     if (authError || !user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
+
+    await requireActiveSubscription(user);
 
     const limited = checkRateLimit(`audit:${user.id}`, 5, 60_000);
     if (!limited.ok) return rateLimitResponse(limited.retryAfterSec);
@@ -247,11 +251,7 @@ Evaluate trajectory against historical telemetry. Grade behavioral discipline (A
       status: 'SUCCESS',
       auditReport: response?.text || 'No audit response generated.',
     });
-  } catch (error: any) {
-    console.error('Gemini Audit Error:', error?.message || error);
-    return NextResponse.json(
-      { error: error?.message || 'Failed to complete financial audit.' },
-      { status: 500 }
-    );
+  } catch (error: unknown) {
+    return toErrorResponse(error, 'audit');
   }
 }
