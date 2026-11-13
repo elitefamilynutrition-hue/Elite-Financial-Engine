@@ -75,19 +75,13 @@
 ---
 ## WEEK 2 — P1 Correctness & cost
 ### Day 1 — Unify snapshot model
-**Ask**
-Trace writers/readers of historical_snapshots vs monthly_telemetry_snapshots (app/api/snapshot, app/api/audit, charts). Recommend one source of truth and the minimal migration path. Do not edit.
-
-
-**Agent**
-P1: Unify snapshots so /api/audit and dashboard charts use the same table/source. Minimal change: one writer contract, update readers only. No new UI. Document the chosen table in a one-line comment on the writer.
-
+> Completed: audit + charts use `historical_snapshots`; `/api/snapshot` is sole writer.
 
 **Done when**
-- [ ] Audit and charts see the same snapshot data after a stamp
-- [ ] Committed
+- [x] Audit and charts see the same snapshot data after a stamp
+- [x] Committed
 ---
-### Day 2 — Wire classify; remove bank-name transfer heuristic
+### Day 2 — Wire classify; remove bank-name transfer heuristic - START HERE
 **Ask**
 Show how sync-transactions currently flags internal transfers vs what lib/plaid/classify.ts provides. List the exact swap. Do not edit.
 
@@ -331,7 +325,7 @@ Stop. Do not continue into other issues. Finish only the acceptance criteria alr
 | 1 | 4 Schema/RLS | ☑ |
 | 1 | 5a Signup gate | ☑ |
 | 1 | 5b Hardcode scrub | ☑ |
-| 2 | 1 Snapshots | ☐ |
+| 2 | 1 Snapshots | ☑ |
 | 2 | 2 Classify | ☐ |
 | 2 | 3 Cursor sync | ☐ |
 | 2 | 4 Aggregates | ☐ |

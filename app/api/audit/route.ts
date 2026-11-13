@@ -49,9 +49,12 @@ export async function POST() {
     // 2. Fetch Profile, Baseline, Snapshots, and Paystub telemetry
     const { data: profile } = await supabase.from('user_financial_profiles').select('*').eq('user_id', user.id).single();
     const { data: baseline } = await supabase.from('program_baselines').select('*').eq('user_id', user.id).single();
+    // Sole snapshot SoT: same table stamped by POST /api/snapshot and read by charts.
     const { data: historicalSnapshots } = await supabase
-      .from('monthly_telemetry_snapshots')
-      .select('*')
+      .from('historical_snapshots')
+      .select(
+        'snapshot_date, liquid_capital, investment_capital, total_liabilities, survival_floor, monthly_burn_rate, wealth_quota_target, wealth_quota_actual'
+      )
       .eq('user_id', user.id)
       .order('snapshot_date', { ascending: false })
       .limit(3);
@@ -190,9 +193,9 @@ ${JSON.stringify(aiOptimizedAccounts, null, 2)}
 OPERATIONAL SPENDING DISTRIBUTION (Plaid Categories):
 ${JSON.stringify(categoryBreakdown, null, 2)}
 
-HISTORICAL SNAPSHOTS & BASELINE:
+HISTORICAL SNAPSHOTS & BASELINE (from historical_snapshots — liquid/investment capital, total_liabilities, survival_floor, monthly_burn_rate, wealth quotas):
 - Baseline: ${JSON.stringify(baseline || 'None')}
-- Snapshots: ${JSON.stringify(historicalSnapshots || [])}
+- Snapshots (newest first): ${JSON.stringify(historicalSnapshots || [])}
 
 Generate a structured forensic audit report following the exact Brennan Order of Operations with these section headers:
 
