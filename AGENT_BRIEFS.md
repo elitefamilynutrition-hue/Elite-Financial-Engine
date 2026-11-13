@@ -81,71 +81,39 @@
 - [x] Audit and charts see the same snapshot data after a stamp
 - [x] Committed
 ---
-### Day 2 — Wire classify; remove bank-name transfer heuristic - START HERE
-**Ask**
-Show how sync-transactions currently flags internal transfers vs what lib/plaid/classify.ts provides. List the exact swap. Do not edit.
-
-
-**Agent**
-P1: Use lib/plaid/classify.ts (and/or Plaid personal_finance_category) in sync-transactions instead of name.includes('chase'|'citi'|'american express'|...). Ensure real purchases are not falsely excluded from burn. Sync path only; short comment on the rule.
-
+### Day 2 — Wire classify; remove bank-name transfer heuristic
+> Completed: sync uses `classifyPlaidTransaction` / PFC; Chase/Citi name heuristic removed.
 
 **Done when**
-- [ ] Heuristic gone from sync
-- [ ] Classify path used
-- [ ] Committed
+- [x] Heuristic gone from sync
+- [x] Classify path used
+- [x] Committed
 ---
 ### Day 3 — Stop default `reset=true` sync
-**Ask**
-Find every caller of /api/plaid/sync-transactions and whether reset=true is used. Propose default resume-cursor + optional Full refresh UX. Do not edit.
-
-
-**Agent**
-P1: Do NOT pass reset=true on every sync.
-
-Default: resume next_cursor.
-Optional explicit "Full refresh" control that passes reset=true. Improve cursor persistence if a mid-loop timeout would otherwise lose progress. Touch callers + sync route only as needed.
+> Completed: default sync resumes cursor; Full refresh button for reset; per-page cursor persist.
 
 **Done when**
-- [ ] Normal load/sync resumes cursor
-- [ ] Full refresh is explicit
-- [ ] Committed
+- [x] Normal load/sync resumes cursor
+- [x] Full refresh is explicit
+- [x] Committed
 ---
 ### Day 4 — Server-side dashboard aggregates
-**Ask**
-In app/page.tsx fetchDashboardData (or equivalent), list what is selected from transactions/accounts and which child components need which fields. Propose a minimal session-scoped aggregate API shape. Do not edit.
-
-
-**Agent**
-P1: Stop loading all transactions into the client on every dashboard load.
-
-Add a session-scoped API returning aggregates the dashboard needs (reuse lib/data/user-financials.ts / baseline patterns if possible).
-Update page.tsx to use it.
-Paginate or omit raw tx list unless a component truly needs it. No unrelated UI redesign.
+> Completed: `/api/telemetry/dashboard` returns accounts + 90d recent txs + baseline; page no longer select(*).
 
 **Done when**
-- [ ] Dashboard no longer `select('*')` full transaction history on load
-- [ ] Numbers still render
-- [ ] Committed
+- [x] Dashboard no longer `select('*')` full transaction history on load
+- [x] Numbers still render
+- [x] Committed
 ---
 ### Day 5 — Rate limits + chat history cap
-**Ask**
-List Gemini/Plaid-heavy routes and suggest simple per-user limits (in-memory OK if documented). Also where audit/chat accepts uncapped history. Do not edit.
-
-
-**Agent**
-P1: Add simple per-user rate limits on: /api/audit, /api/audit/chat, /api/telemetry/vision, /api/telemetry/transactions, and plaid sync.
-
-Return 429 with Retry-After when exceeded.
-Cap audit/chat history length server-side.
-Document single-instance / best-effort if in-memory. No Redis required.
+> Completed: in-memory rate limits on audit/chat/vision/classify/sync; chat history capped at 40.
 
 **Done when**
-- [ ] Rapid-fire audit/chat eventually 429s
-- [ ] Oversized history rejected or truncated
-- [ ] Committed
+- [x] Rapid-fire audit/chat eventually 429s
+- [x] Oversized history rejected or truncated
+- [x] Committed
 ---
-## WEEK 3 — P2 Sell layer
+## WEEK 3 — P2 Sell layer - START HERE
 ### Day 1 — Stripe design (Ask only) + checkout skeleton
 **You first**
 - Create Stripe Product + Price; note `price_id`, webhook secret.
@@ -326,10 +294,10 @@ Stop. Do not continue into other issues. Finish only the acceptance criteria alr
 | 1 | 5a Signup gate | ☑ |
 | 1 | 5b Hardcode scrub | ☑ |
 | 2 | 1 Snapshots | ☑ |
-| 2 | 2 Classify | ☐ |
-| 2 | 3 Cursor sync | ☐ |
-| 2 | 4 Aggregates | ☐ |
-| 2 | 5 Rate limits | ☐ |
+| 2 | 2 Classify | ☑ |
+| 2 | 3 Cursor sync | ☑ |
+| 2 | 4 Aggregates | ☑ |
+| 2 | 5 Rate limits | ☑ |
 | 3 | 1 Stripe checkout | ☐ |
 | 3 | 2 Entitlements | ☐ |
 | 3 | 3 Legal/export | ☐ |

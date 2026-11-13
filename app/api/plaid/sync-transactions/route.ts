@@ -3,6 +3,8 @@ import { plaidClient } from '@/lib/plaid';
 import { getServiceSupabase } from '@/lib/supabase-admin';
 import { decryptToken } from '@/lib/crypto';
 import { createServerSupabaseClient } from '@/lib/supabase-server';
+import { classifyPlaidTransaction, toCategoryString } from '@/lib/plaid/classify';
+import { checkRateLimit, rateLimitResponse } from '@/lib/http/rate-limit';
 
 export async function POST(request: NextRequest) {
   try {
@@ -12,6 +14,9 @@ export async function POST(request: NextRequest) {
     if (authError || !user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
+
+    const limited = checkRateLimit(`plaid-sync:${user.id}`, 10, 60_000);
+    if (!limited.ok) return rateLimitResponse(limited.retryAfterSec);
 
     const supabase = getServiceSupabase();
     
@@ -131,23 +136,9 @@ export async function POST(request: NextRequest) {
           hasMore = data.has_more;
           cursor = data.next_cursor;
 
+          // Classify via Plaid personal_finance_category (not bank-name heuristics).
           const toUpsert = [...added, ...modified].map((tx) => {
-            const catString = tx.category ? tx.category.join(', ') : '';
-            const nameLower = (tx.name || '').toLowerCase();
-            const catLower = catString.toLowerCase();
-
-            // Auto-detect internal transfers and credit card payments to protect Survival Floor
-             // Update your transfer detection rules:
-            const isTransfer = catLower.includes('payment') || 
-                               catLower.includes('transfer') || 
-                               catLower.includes('service') ||
-                               nameLower.includes('payment') || 
-                               nameLower.includes('autopay') || 
-                               nameLower.includes('ach deposit') ||
-                               nameLower.includes('chase') || 
-                               nameLower.includes('citi') || 
-                               nameLower.includes('american express');
-
+            const classified = classifyPlaidTransaction(tx);
             return {
               user_id: item.user_id,
               plaid_transaction_id: tx.transaction_id,
@@ -156,10 +147,10 @@ export async function POST(request: NextRequest) {
               merchant_name: tx.merchant_name || null,
               amount: tx.amount,
               date: tx.date,
-              category: catString || null,
+              category: toCategoryString(tx),
               pending: tx.pending,
-              is_internal_transfer: isTransfer,
-              transaction_intent: isTransfer ? 'transfer' : null,
+              is_internal_transfer: classified.is_internal_transfer,
+              transaction_intent: classified.transaction_intent,
             };
           });
 
@@ -182,6 +173,16 @@ export async function POST(request: NextRequest) {
           totalAdded += added.length;
           totalModified += modified.length;
           totalRemoved += removed.length;
+
+          // Persist cursor after each page so a mid-sync timeout does not lose progress.
+          await supabase
+            .from('plaid_items')
+            .update({
+              next_cursor: cursor,
+              updated_at: new Date().toISOString(),
+            })
+            .eq('item_id', item.item_id)
+            .eq('user_id', item.user_id);
         }
 
         // Sync Investment Transactions (Trailing 30 Days)

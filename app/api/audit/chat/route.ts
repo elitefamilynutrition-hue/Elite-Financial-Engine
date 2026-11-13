@@ -1,6 +1,9 @@
 import { NextResponse } from 'next/server';
 import { createServerSupabaseClient } from '@/lib/supabase-server';
 import { GoogleGenAI } from '@google/genai';
+import { checkRateLimit, rateLimitResponse } from '@/lib/http/rate-limit';
+
+const MAX_CHAT_HISTORY = 40;
 
 export async function POST(request: Request) {
   try {
@@ -11,12 +14,16 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
+    const limited = checkRateLimit(`audit-chat:${user.id}`, 20, 60_000);
+    if (!limited.ok) return rateLimitResponse(limited.retryAfterSec);
+
     // 1. Initialize inside the execution block to guarantee env variables are loaded
     const apiKey = process.env.GEMINI_API_KEY;
     if (!apiKey) throw new Error("GEMINI_API_KEY is missing from environment variables.");
     const ai = new GoogleGenAI({ apiKey });
 
     const { message, history } = await request.json();
+    const cappedHistory = Array.isArray(history) ? history.slice(-MAX_CHAT_HISTORY) : [];
 
     // 2. Fetch live telemetry context to ground the AI response
     const [profileRes, accountsRes, paystubsRes, manualRes] = await Promise.all([
@@ -66,7 +73,7 @@ OPERATOR TELEMETRY CONTEXT:
 `;
 
     // 4. STRIP the frontend's static welcome message to prevent Gemini's "Alternating Roles" API Crash
-    const cleanHistory = (history || []).filter((h: any) => !h.content.includes('Audit telemetry loaded.'));
+    const cleanHistory = cappedHistory.filter((h: any) => !h.content?.includes('Audit telemetry loaded.'));
 
     const chatHistory = [
       { role: 'user', parts: [{ text: systemPrompt }] },

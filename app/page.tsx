@@ -84,40 +84,32 @@ function DashboardContent() {
   };
 
   const fetchDashboardData = async () => {
-    const { data: accData } = await supabase.from('financial_accounts').select('*');
-    if (accData) setAccounts(accData);
-
-    const { data: txData } = await supabase
-      .from('transactions')
-      .select('*')
-      .order('date', { ascending: false });
-    if (txData) setTransactions(txData);
-
     try {
-      const { data: { session } } = await supabase.auth.getSession();
-      const currentUserId = session?.user?.id || '';
-      if (currentUserId) setUserId(currentUserId);
-      
-      const res = await fetch(`/api/baseline?userId=${currentUserId}`);
-      
-      if (res.ok) {
-        const payload = await res.json();
-        if (payload.status === 'SUCCESS') {
-          setBaselineTelemetry(payload.telemetry);
-        }
-      } else {
-        console.error('Backend returned status:', res.status);
+      const res = await fetch('/api/telemetry/dashboard');
+      if (!res.ok) {
+        console.error('Dashboard API status:', res.status);
+        return;
       }
+      const payload = await res.json();
+      if (payload.status !== 'SUCCESS') return;
+
+      if (payload.user_id) setUserId(payload.user_id);
+      setAccounts(payload.accounts || []);
+      setTransactions(payload.recent_transactions || []);
+      if (payload.telemetry) setBaselineTelemetry(payload.telemetry);
     } catch (error) {
-      console.error('Failed to fetch baseline telemetry:', error);
+      console.error('Failed to fetch dashboard data:', error);
     }
   };
 
-  const syncTransactions = async () => {
+  /** Default: resume Plaid next_cursor. Pass forceReset for explicit full history refresh. */
+  const syncTransactions = async (forceReset = false) => {
     setIsSyncing(true);
     try {
-      // Automatically force-reset cursors on sync to ensure fresh data and bypass stale caches
-      const res = await fetch('/api/plaid/sync-transactions?reset=true', { 
+      const url = forceReset
+        ? '/api/plaid/sync-transactions?reset=true'
+        : '/api/plaid/sync-transactions';
+      const res = await fetch(url, {
          method: 'POST',
          headers: { 'Content-Type': 'application/json' }
       });
@@ -135,7 +127,6 @@ function DashboardContent() {
       if (data.status === 'SUCCESS' || data.message) await fetchDashboardData();
     } catch (error: any) {
       console.error('Failed to sync transactions:', error.message || error);
-      // Optional: Add a UI toast/alert here if you want visible user feedback
       alert(`Sync Failed: ${error.message || 'Unknown error'}`);
     } finally {
       setIsSyncing(false);
@@ -276,12 +267,20 @@ function DashboardContent() {
               Configure Targets
             </button>
             <button
-              onClick={syncTransactions}
+              onClick={() => syncTransactions(false)}
               disabled={isSyncing}
               className="bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 disabled:opacity-50 text-zinc-200 font-semibold py-2.5 px-4 rounded-lg transition flex items-center gap-2 text-sm"
             >
               <span className={`h-2 w-2 rounded-full ${isSyncing ? 'bg-amber-400 animate-ping' : 'bg-emerald-400'}`} />
               {isSyncing ? 'Syncing...' : 'Sync Telemetry'}
+            </button>
+            <button
+              onClick={() => syncTransactions(true)}
+              disabled={isSyncing}
+              title="Clears Plaid cursors and re-downloads history"
+              className="bg-zinc-950 hover:bg-zinc-800 border border-zinc-700 disabled:opacity-50 text-zinc-400 hover:text-zinc-200 font-semibold py-2.5 px-3 rounded-lg transition text-sm"
+            >
+              Full refresh
             </button>
             <button
               onClick={() => setIsChatOpen(true)}

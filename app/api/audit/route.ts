@@ -2,6 +2,7 @@
 import { GoogleGenAI } from '@google/genai';
 import { getServiceSupabase } from '@/lib/supabase-admin';
 import { createServerSupabaseClient } from '@/lib/supabase-server';
+import { checkRateLimit, rateLimitResponse } from '@/lib/http/rate-limit';
 
 export async function POST() {
   try {
@@ -11,6 +12,9 @@ export async function POST() {
     if (authError || !user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
+
+    const limited = checkRateLimit(`audit:${user.id}`, 5, 60_000);
+    if (!limited.ok) return rateLimitResponse(limited.retryAfterSec);
 
     const apiKey = process.env.GEMINI_API_KEY;
     if (!apiKey) {

@@ -1,9 +1,63 @@
 import { NextResponse } from 'next/server';
 import { GoogleGenAI } from '@google/genai';
-import { getServiceSupabase } from '@/lib/supabase';
+import { getServiceSupabase } from '@/lib/supabase-admin';
+import { createServerSupabaseClient } from '@/lib/supabase-server';
+import { checkRateLimit, rateLimitResponse } from '@/lib/http/rate-limit';
+
+function calculateFederalMarginalBracket(
+  annualGross: number,
+  annualBonus: number,
+  annualPreTaxDeductions: number,
+  filingStatus: string
+): number {
+  const status = (filingStatus || 'Single').toLowerCase();
+  
+  // 2026 IRS Standard Deductions
+  let standardDeduction = 15000;
+  if (status.includes('joint') || status === 'married') {
+    standardDeduction = 30000;
+  } else if (status.includes('head')) {
+    standardDeduction = 22500;
+  }
+
+  const taxableIncome = Math.max(
+    0,
+    annualGross + annualBonus - annualPreTaxDeductions - standardDeduction
+  );
+
+  // 2026 Federal Statutory Brackets (Married Filing Jointly vs Single/HoH)
+  if (status.includes('joint') || status === 'married') {
+    if (taxableIncome > 751600) return 37;
+    if (taxableIncome > 501050) return 35;
+    if (taxableIncome > 394600) return 32;
+    if (taxableIncome > 206700) return 24;
+    if (taxableIncome > 96950) return 22;
+    if (taxableIncome > 23850) return 12;
+    return 10;
+  } else {
+    if (taxableIncome > 626350) return 37;
+    if (taxableIncome > 250525) return 35;
+    if (taxableIncome > 197300) return 32;
+    if (taxableIncome > 103350) return 24;
+    if (taxableIncome > 48475) return 22;
+    if (taxableIncome > 11925) return 12;
+    return 10;
+  }
+}
 
 export async function POST(request: Request) {
   try {
+    // 1. Authenticate user session
+    const authSupabase = await createServerSupabaseClient();
+    const { data: { user }, error: authError } = await authSupabase.auth.getUser();
+
+    if (authError || !user) {
+      return NextResponse.json({ error: 'Unauthorized session.' }, { status: 401 });
+    }
+
+    const limited = checkRateLimit(`vision:${user.id}`, 10, 60_000);
+    if (!limited.ok) return rateLimitResponse(limited.retryAfterSec);
+
     const apiKey = process.env.GEMINI_API_KEY;
     if (!apiKey) {
       return NextResponse.json({ error: 'GEMINI_API_KEY is not configured.' }, { status: 500 });
@@ -72,7 +126,7 @@ Return ONLY valid JSON with these exact keys. If a date field is missing, defaul
 
     const textResponse = response?.text || '';
     const cleanedJson = textResponse.replace(/```json/g, '').replace(/```/g, '').trim();
-    
+
     let parsedData;
     try {
       parsedData = JSON.parse(cleanedJson);
@@ -88,35 +142,94 @@ Return ONLY valid JSON with these exact keys. If a date field is missing, defaul
 
     const gross = Number(parsedData.gross_pay || 0);
     const net = Number(parsedData.net_pay || 0);
+    const preTax401k = Number(parsedData.pre_tax_401k || 0);
+    const hsaContribution = Number(parsedData.hsa_contribution || 0);
 
     const supabase = getServiceSupabase();
-    const { data, error } = await supabase
-      .from('paystub_records')
-      .insert([
-        {
-          pay_period_start: payPeriodStart,
-          pay_period_end: payPeriodEnd,
-          pay_date: payDate,
-          gross_pay: gross,
-          federal_tax_withheld: Number(parsedData.federal_tax_withheld || 0),
-          state_tax_withheld: Number(parsedData.state_tax_withheld || 0),
-          fica_medicare_tax: Number(parsedData.fica_medicare_tax || 0),
-          pre_tax_401k: Number(parsedData.pre_tax_401k || 0),
-          employer_401k_match: Number(parsedData.employer_401k_match || 0),
-          hsa_contribution: Number(parsedData.hsa_contribution || 0),
-          net_pay: net,
-        },
-      ])
-      .select()
-      .single();
 
-    if (error) {
-      throw error;
+    // 2. Duplicate Check: Prevent double-counting if user uploads the same paystub twice
+    const { data: existingStub } = await supabase
+      .from('paystub_records')
+      .select('id')
+      .eq('user_id', user.id)
+      .eq('pay_date', payDate)
+      .eq('pay_period_end', payPeriodEnd)
+      .maybeSingle();
+
+    const payload = {
+      user_id: user.id,
+      pay_period_start: payPeriodStart,
+      pay_period_end: payPeriodEnd,
+      pay_date: payDate,
+      gross_pay: gross,
+      federal_tax_withheld: Number(parsedData.federal_tax_withheld || 0),
+      state_tax_withheld: Number(parsedData.state_tax_withheld || 0),
+      fica_medicare_tax: Number(parsedData.fica_medicare_tax || 0),
+      pre_tax_401k: preTax401k,
+      employer_401k_match: Number(parsedData.employer_401k_match || 0),
+      hsa_contribution: hsaContribution,
+      net_pay: net,
+    };
+
+    let savedRecord;
+    if (existingStub?.id) {
+      const { data, error } = await supabase
+        .from('paystub_records')
+        .update(payload)
+        .eq('id', existingStub.id)
+        .select()
+        .single();
+      if (error) throw error;
+      savedRecord = data;
+    } else {
+      const { data, error } = await supabase
+        .from('paystub_records')
+        .insert([payload])
+        .select()
+        .single();
+      if (error) throw error;
+      savedRecord = data;
+    }
+
+    // 3. Auto-Refine Marginal Tax Bracket in user_financial_profiles based on real pre-tax deductions
+    const { data: userProfile } = await supabase
+      .from('user_financial_profiles')
+      .select('annual_gross_salary, annual_bonus_target, relationship_status')
+      .eq('user_id', user.id)
+      .maybeSingle();
+
+    if (userProfile) {
+      // Infer pay frequency from pay period length (default 24 semi-monthly if dates match)
+      const startMs = new Date(payPeriodStart).getTime();
+      const endMs = new Date(payPeriodEnd).getTime();
+      const periodDays = Math.max(1, Math.round((endMs - startMs) / (1000 * 60 * 60 * 24)));
+      
+      let periodsPerYear = 24;
+      if (periodDays <= 8) periodsPerYear = 52;
+      else if (periodDays <= 14) periodsPerYear = 26;
+      else if (periodDays >= 27) periodsPerYear = 12;
+
+      const annualPreTaxDeductions = (preTax401k + hsaContribution) * periodsPerYear;
+      const annualGross = Number(userProfile.annual_gross_salary || 0) || (gross * periodsPerYear);
+      const annualBonus = Number(userProfile.annual_bonus_target || 0);
+
+      const dynamicBracket = calculateFederalMarginalBracket(
+        annualGross,
+        annualBonus,
+        annualPreTaxDeductions,
+        userProfile.relationship_status || 'Single'
+      );
+
+      await supabase
+        .from('user_financial_profiles')
+        .update({ marginal_tax_bracket: dynamicBracket })
+        .eq('user_id', user.id);
     }
 
     return NextResponse.json({
       status: 'SUCCESS',
-      record: data,
+      record: savedRecord,
+      deduplicated: Boolean(existingStub?.id),
     });
   } catch (error: any) {
     console.error('Paystub Vision API Error:', error?.message || error);

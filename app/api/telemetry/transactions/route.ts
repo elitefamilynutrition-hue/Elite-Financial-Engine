@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { GoogleGenAI } from '@google/genai';
 import { createServerSupabaseClient } from '@/lib/supabase-server';
 import { getServiceSupabase } from '@/lib/supabase-admin';
+import { checkRateLimit, rateLimitResponse } from '@/lib/http/rate-limit';
 
 export async function POST(request: Request) {
   try {
@@ -11,6 +12,9 @@ export async function POST(request: Request) {
     if (authError || !user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
+
+    const limited = checkRateLimit(`tx-classify:${user.id}`, 10, 60_000);
+    if (!limited.ok) return rateLimitResponse(limited.retryAfterSec);
 
     const apiKey = process.env.GEMINI_API_KEY;
     if (!apiKey) {
