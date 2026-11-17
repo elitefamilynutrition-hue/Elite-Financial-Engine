@@ -1,4 +1,4 @@
-# BudgetDog — Agent Briefs (Pro-efficient)
+# Elite Capital Engine — Agent Briefs (Pro-efficient)
 **How to use**
 1. Do **only today’s** section.
 2. Run the **Ask** prompt first (Ask mode), then open a **new** Agent chat with the **Agent** prompt.
@@ -162,12 +162,18 @@ Draft short plain-English outlines for /privacy and /terms appropriate for a Pla
 **Agent**
 P2: Add /privacy and /terms pages (accurate stubs), footer/nav links, and a "Not financial advice" disclaimer near audit UI. Add session-scoped export and delete endpoints (or delete flow) for the user. No fake SOC2/compliance badges.
 
+**Shipped**
+- `/privacy` + `/terms` stubs (Elite Capital Engine only; marked not counsel-reviewed)
+- Footer + login links; proxy allows public legal pages
+- Audit disclaimer on Run Gemini Audit, audit report, AuditChatDrawer
+- `GET /api/account/export` + `POST /api/account/delete` (`requireUser`, no Stripe gate)
+- Product branding scrub: Elite Capital Engine only in UI/prompts/docs branding
 
 **Done when**
-- [ ] Pages reachable
-- [ ] Disclaimer visible on audit
-- [ ] Export/delete exists or documented manual path with API stub
-- [ ] Committed
+- [x] Pages reachable
+- [x] Disclaimer visible on audit
+- [x] Export/delete exists or documented manual path with API stub
+- [x] Committed
 ---
 ### Day 4 — Sentry + CI
 **You first**
@@ -311,7 +317,7 @@ Stop. Do not continue into other issues. Finish only the acceptance criteria alr
 | 2 | 5 Rate limits | ☑ |
 | 3 | 1 Stripe checkout | ☑ |
 | 3 | 2 Entitlements | ☑ |
-| 3 | 3 Legal/export | ☐ |
+| 3 | 3 Legal/export | ☑ |
 | 3 | 4 Sentry/CI | ☐ |
 | 3 | 5 Ledger/env | ☐ |
 | 4 | 1 Exclusions | ☐ |

@@ -1,6 +1,6 @@
-# BUDGETDOG FINANCIAL ENGINE — MASTER LEDGER & ARCHITECTURE REGISTRY
+# ELITE CAPITAL ENGINE — MASTER LEDGER & ARCHITECTURE REGISTRY
 
-**Operating Philosophy:** Brennan Schlagbaum (BudgetDog) Math-First Wealth Architecture  
+**Operating Philosophy:** Math-first wealth architecture  
 **Core Stack:** Next.js 15 (App Router), Supabase (PostgreSQL, RLS), Plaid API, Google Gemini (`gemini-3.6-flash`), Tailwind CSS  
 **Ledger Policy:** Maintain a single source of truth. Schema, routes, components, and roadmaps are consolidated in the primary registry, with individual milestone completions logged chronologically.
 
@@ -8,7 +8,7 @@
 
 ## 1. PROJECT OVERVIEW & ARCHITECTURAL FOUNDATION
 
-The BudgetDog Financial Engine is an automated financial telemetry and forensic auditing platform. It transforms passive financial tracking into an active capital allocation system adhering to Brennan Schlagbaum's Order of Operations.
+The Elite Capital Engine is an automated financial telemetry and forensic auditing platform. It transforms passive financial tracking into an active capital allocation system using a Work-Backwards Order of Operations.
 
 ### Core Objectives
 1. **Automated Delta Telemetry:** Ingest and normalize multi-institution accounts and transactions via Plaid cursor-based syncing without credential re-authentication.
@@ -201,7 +201,7 @@ PHASE 1: Real-Time Telemetry & Core Audit Engine
 
 [x] Task 1.4: Create plaid_items table and build cursor-based /api/plaid/sync-transactions route.
 
-[x] Task 1.5: Build BudgetDog forensic audit engine on gemini-3.6-flash with exponential backoff.
+[x] Task 1.5: Build Elite Capital Engine forensic audit engine on gemini-3.6-flash with exponential backoff.
 
 [x] Task 1.6: Wire automatic background sync and on-demand sync button in the UI.
 

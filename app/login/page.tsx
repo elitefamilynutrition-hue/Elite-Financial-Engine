@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import Link from 'next/link';
 import { createBrowserSupabaseClient } from '@/lib/supabase-browser';
 import { useRouter } from 'next/navigation';
 
@@ -71,7 +72,7 @@ export default function LoginPage() {
     <div className="min-h-screen flex items-center justify-center bg-black p-4">
       <div className="w-full max-w-md bg-zinc-900 border border-zinc-800 rounded-xl p-8 space-y-6">
         <div className="text-center space-y-2">
-          <h1 className="text-2xl font-bold text-zinc-100">BudgetDog Engine</h1>
+          <h1 className="text-2xl font-bold text-zinc-100">Elite Capital Engine</h1>
           <p className="text-sm text-zinc-400">Restricted Access</p>
         </div>
 
@@ -133,6 +134,16 @@ export default function LoginPage() {
             </button>
           </div>
         </form>
+
+        <p className="text-center text-xs text-zinc-500">
+          <Link href="/privacy" className="hover:text-zinc-300 underline-offset-2 hover:underline">
+            Privacy
+          </Link>
+          {' · '}
+          <Link href="/terms" className="hover:text-zinc-300 underline-offset-2 hover:underline">
+            Terms
+          </Link>
+        </p>
       </div>
     </div>
   );

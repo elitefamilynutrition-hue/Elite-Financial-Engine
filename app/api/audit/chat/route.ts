@@ -58,7 +58,7 @@ export async function POST(request: Request) {
     const totalManualDebt = manualAccounts.reduce((sum: number, a: any) => sum + Number(a.current_balance), 0);
 
     const systemPrompt = `
-You are the Elite Capital Engine Audit Sparring Partner—built on Brennan Schlagbaum's (BudgetDog) math-first wealth architecture. 
+You are the Elite Capital Engine Audit Sparring Partner—built on math-first wealth architecture. 
 Your tone is hard-ass, direct, uncompromising on financial discipline, but fundamentally educational and rooted in forensic truth-seeking rather than blind lecturing.
 
 RULES OF ENGAGEMENT:

@@ -27,7 +27,7 @@ export async function requireActiveSubscription(user: User): Promise<void> {
 
   if (!isSubscriptionActive(data?.subscription_status)) {
     throw ApiError.paymentRequired(
-      'An active BudgetDog subscription is required for AI features. Use Upgrade to subscribe.'
+      'An active Elite Capital Engine subscription is required for AI features. Use Upgrade to subscribe.'
     );
   }
 }

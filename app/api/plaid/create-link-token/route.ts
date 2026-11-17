@@ -1,4 +1,4 @@
-﻿import { NextResponse } from 'next/server';
+import { NextResponse } from 'next/server';
 import { plaidClient } from '@/lib/plaid';
 import { Products, CountryCode } from 'plaid';
 import { createServerSupabaseClient } from '@/lib/supabase-server';
@@ -16,7 +16,7 @@ export async function POST() {
 
     const response = await plaidClient.linkTokenCreate({
       user: { client_user_id: user.id },
-      client_name: 'BudgetDog Financial App',
+      client_name: 'Elite Capital Engine',
       products: [Products.Transactions],
       country_codes: [CountryCode.Us],
       language: 'en',

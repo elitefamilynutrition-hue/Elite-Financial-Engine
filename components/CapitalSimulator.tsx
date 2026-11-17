@@ -84,7 +84,7 @@ export default function CapitalSimulator({
           <span className="text-xs font-semibold tracking-wider text-emerald-400 uppercase">Phase 4 Engine</span>
           <h2 className="text-xl font-bold tracking-tight text-white">Capital Reallocation & Opportunity Cost Simulator</h2>
           <p className="text-sm text-slate-400">
-            Model Brennan&apos;s Order of Operations to deploy cash drag into wealth engines.
+            Model the Work-Backwards Order of Operations to deploy cash drag into wealth engines.
           </p>
         </div>
         <button

@@ -112,7 +112,7 @@ export async function POST() {
         }
       });
 
-    // 4. Brennan's Work-Backwards Waterfall Calculation
+    // 4. Work-Backwards Waterfall Calculation
     const grossSalary = profile?.annual_gross_salary != null ? Number(profile.annual_gross_salary) : null;
     const grossMonthlyIncome = grossSalary != null ? grossSalary / 12 : null;
     
@@ -155,7 +155,7 @@ export async function POST() {
       };
     }
 
-    // THE BRENNAN POST-WEALTH RESIDUAL CAP FORMULA:
+    // POST-WEALTH RESIDUAL CAP FORMULA:
     // Net Inflow minus (Mandatory 20% Wealth Quota) minus (Fixed Debt Service) minus (Health & Protection Leaks)
     const postWealthResidualCap =
       estimatedNetMonthlyInflow != null && grossWealthQuotaMonthly != null
@@ -174,10 +174,10 @@ export async function POST() {
 
     // 5. Construct Protocol Audit Payload
     const promptPayload = `
-You are the Elite Capital Engine Auditor executing the strict "Work Backwards" Budgetdog (Brennan) Protocol.
+You are the Elite Capital Engine Auditor executing the strict "Work Backwards" Protocol.
 Your tone is blunt, uncompromising, analytical, and uncompromisingly disciplined. You enforce savings and debt destruction as absolute non-negotiable laws, treating variable lifestyle spending strictly as a dynamic residual.
 
-BRENNAN PRIORITY HIERARCHY WATERFALL:
+PRIORITY HIERARCHY WATERFALL:
 1. MANDATORY 20% GROSS WEALTH QUOTA: ${fmtMoney(grossWealthQuotaMonthly)} / month (Automatically satisfied via automated payroll 401k contributions of ~$${monthlyPayrollWealthContribution.toFixed(2)}/mo + discretionary post-tax investments/debt payoff).
 2. PROTECTION, HEALTH & FIXED OBLIGATIONS:
    - Fixed Debt Service (manual liabilities): $${totalFixedLiabilitiesMonthly.toFixed(2)} / month
@@ -205,7 +205,7 @@ HISTORICAL SNAPSHOTS & BASELINE (from historical_snapshots — liquid/investment
 - Baseline: ${JSON.stringify(baseline || 'None')}
 - Snapshots (newest first): ${JSON.stringify(historicalSnapshots || [])}
 
-Generate a structured forensic audit report following the exact Brennan Order of Operations with these section headers:
+Generate a structured forensic audit report following the Work-Backwards Order of Operations with these section headers:
 
 **1. Work-Backwards Waterfall & Residual Audit**
 Evaluate whether current operational burn ($${operationalBurn.toFixed(2)}) strictly respects the Post-Wealth Residual Cap (${fmtMoney(postWealthResidualCap)}). Expose any month where lifestyle spending invaded capital reserved for the 20% wealth quota or fixed protection layers. If salary/paystub data is "not set", say so and avoid inventing numbers.

@@ -1,6 +1,7 @@
 ﻿'use client';
 
 import { useState, useEffect, Suspense } from 'react';
+import Link from 'next/link';
 import { useSearchParams, useRouter, usePathname } from 'next/navigation';
 import { PlaidLinkButton } from '@/components/PlaidLinkButton';
 import { TelemetryGrid } from '@/components/TelemetryGrid';
@@ -315,13 +316,18 @@ function DashboardContent() {
               </svg>
               Sparring Chat
             </button>
-            <button
-              onClick={runGeminiAudit}
-              disabled={isAuditing || accounts.length === 0}
-              className="bg-indigo-600 hover:bg-indigo-500 disabled:opacity-40 text-white font-semibold py-2.5 px-5 rounded-lg transition text-sm"
-            >
-              {isAuditing ? 'Auditing Portfolios...' : 'Run Gemini Audit'}
-            </button>
+            <div className="flex flex-col items-end gap-1">
+              <button
+                onClick={runGeminiAudit}
+                disabled={isAuditing || accounts.length === 0}
+                className="bg-indigo-600 hover:bg-indigo-500 disabled:opacity-40 text-white font-semibold py-2.5 px-5 rounded-lg transition text-sm"
+              >
+                {isAuditing ? 'Auditing Portfolios...' : 'Run Gemini Audit'}
+              </button>
+              <p className="text-[10px] text-zinc-500 max-w-[14rem] text-right leading-snug">
+                Not financial, tax, or investment advice. AI output can be wrong — verify before you act.
+              </p>
+            </div>
             <button
               onClick={runManualSnapshot}
               disabled={isSnapshotting || !userId}
@@ -365,6 +371,9 @@ function DashboardContent() {
                 Close
               </button>
             </div>
+            <p className="text-xs text-zinc-500">
+              Not financial, tax, or investment advice. AI output can be wrong — verify before you act.
+            </p>
             <div className="text-zinc-300 text-sm whitespace-pre-wrap leading-relaxed">
               {auditReport}
             </div>
@@ -537,6 +546,18 @@ function DashboardContent() {
             targetYears={20}
           />
         )}
+
+        <footer className="border-t border-zinc-800 pt-6 pb-2 flex flex-wrap items-center justify-between gap-3 text-xs text-zinc-500">
+          <span>Elite Capital Engine</span>
+          <nav className="flex gap-4">
+            <Link href="/privacy" className="hover:text-zinc-300 underline-offset-2 hover:underline">
+              Privacy
+            </Link>
+            <Link href="/terms" className="hover:text-zinc-300 underline-offset-2 hover:underline">
+              Terms
+            </Link>
+          </nav>
+        </footer>
       </div>
 
       <SettingsDrawer

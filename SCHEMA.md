@@ -1,4 +1,4 @@
-# BudgetDog schema registry
+# Elite Capital Engine schema registry
 
 Source of truth for tables, RLS, and upsert conflict targets. Reconstructed from live Supabase CSV dumps (Week 1 Day 4). Migrations live under `supabase/migrations/`.
 
