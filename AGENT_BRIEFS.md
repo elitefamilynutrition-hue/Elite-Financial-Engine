@@ -200,11 +200,17 @@ Mark Phase 7/8 status accurately.
 Add .env.example with required keys (no secret values).
 Fix app metadata away from "Create Next App".
 
+**Shipped**
+- `MASTER_LEDGER.md` reconciled: Next 16, fail-closed crypto, supabase-admin, removed false `telemetry/baseline|snapshot|paystub`, added ECE routes/components, schema → `SCHEMA.md` + migrations
+- Phase 6 split (webhook verify done; cron / prod ops open); Week 4 items explicitly not shipped
+- `.env.example` keys only
+- `app/layout.tsx` metadata already Elite Capital Engine (confirmed)
+
 **Done when**
-- [ ] Ledger matches repo
-- [ ] `.env.example` present
-- [ ] Title/metadata fixed
-- [ ] Committed
+- [x] Ledger matches repo
+- [x] `.env.example` present
+- [x] Title/metadata fixed
+- [x] Committed
 ---
 ## WEEK 4 — P3 Differentiation
 ### Day 1 — Account exclusion (Phase 7.2)
@@ -319,7 +325,7 @@ Stop. Do not continue into other issues. Finish only the acceptance criteria alr
 | 3 | 2 Entitlements | ☑ |
 | 3 | 3 Legal/export | ☑ |
 | 3 | 4 Sentry/CI | ☐ |
-| 3 | 5 Ledger/env | ☐ |
+| 3 | 5 Ledger/env | ☑ |
 | 4 | 1 Exclusions | ☐ |
 | 4 | 2 Profile APIs | ☐ |
 | 4 | 3 Savings/subs | ☐ |

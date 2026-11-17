@@ -1,8 +1,10 @@
 # ELITE CAPITAL ENGINE — MASTER LEDGER & ARCHITECTURE REGISTRY
 
 **Operating Philosophy:** Math-first wealth architecture  
-**Core Stack:** Next.js 15 (App Router), Supabase (PostgreSQL, RLS), Plaid API, Google Gemini (`gemini-3.6-flash`), Tailwind CSS  
-**Ledger Policy:** Maintain a single source of truth. Schema, routes, components, and roadmaps are consolidated in the primary registry, with individual milestone completions logged chronologically.
+**Core Stack:** Next.js 16 (App Router, Turbopack, `proxy.ts`), Supabase (PostgreSQL, RLS), Plaid API, Google Gemini, Tailwind CSS, Recharts, Stripe (checkout skeleton)  
+**Ledger Policy:** Maintain a single source of truth. Schema detail lives in `SCHEMA.md` + `supabase/migrations/`. This file tracks registry, roadmap status, and runbook.
+
+**Reconciled:** Week 3 Day 5 — registry matched to filesystem (Elite Capital Engine branding only).
 
 ---
 
@@ -11,288 +13,136 @@
 The Elite Capital Engine is an automated financial telemetry and forensic auditing platform. It transforms passive financial tracking into an active capital allocation system using a Work-Backwards Order of Operations.
 
 ### Core Objectives
-1. **Automated Delta Telemetry:** Ingest and normalize multi-institution accounts and transactions via Plaid cursor-based syncing without credential re-authentication.
-2. **Deterministic Pre-Aggregation:** Compute liquid capital, revolving debt, net liquidity, cash burn, and categorical outflows on the server to prevent LLM mathematical hallucination.
-3. **Forensic AI Auditing:** Execute deterministic financial audits via `gemini-3.6-flash` assessing debt drag, cash drag, tax drag, and lifestyle creep.
-4. **Longitudinal Memory & Upstream Telemetry:** Benchmark real-time telemetry against pre-program baselines, track month-over-month velocity, and audit gross-to-net paystub deductions.
-5. **Zero-Plaintext Security:** Enforce authenticated AES-256-GCM encryption at rest for all third-party banking tokens.
+1. **Automated Delta Telemetry:** Ingest and normalize multi-institution accounts via Plaid cursor-based syncing (including investments where linked).
+2. **Deterministic Pre-Aggregation:** Compute liquid capital, revolving debt, net liquidity, and cash burn on the server to prevent LLM mathematical hallucination.
+3. **Forensic AI Auditing:** Execute audits and sparring chat via Gemini with deterministic waterfall math in TypeScript.
+4. **Longitudinal Memory & Upstream Telemetry:** Benchmark against historical snapshots / baselines and paystub OCR deductions.
+5. **Zero-Plaintext Security:** AES-256-GCM encryption at rest for Plaid access tokens (fail-closed decrypt).
 
 ---
 
 ## 2. FILE & COMPONENT REGISTRY
 
-### Core Utilities & Security
-* **`lib/supabase.ts`**
-  * **Status:** Active
-  * **Exports:** `supabase` (client-side anon instance), `getServiceSupabase()` (privileged service-role instance for backend routes).
-* **`lib/plaid.ts`**
-  * **Status:** Active
-  * **Purpose:** Initializes official Plaid SDK client configured for Sandbox/Development environments.
-* **`lib/crypto.ts`**
-  * **Status:** Active
-  * **Purpose:** AES-256-GCM encryption module for Plaid credentials using 96-bit IVs and 128-bit authentication tags. Encrypts tokens at rest as `iv:tag:ciphertext` with legacy plaintext fallback support.
+### Edge / auth boundary
+* **`proxy.ts`** — Supabase session gate; exempts `/login`, `/privacy`, `/terms`, Plaid + Stripe webhooks.
 
-### UI Components
-* **`components/TelemetryGrid.tsx`**
-  * **Status:** Active (Consolidated in root `components` directory)
-  * **Metrics Rendered:** Liquid Capital, Revolving Debt, Net Liquidity, 30-Day Outflow Burn, Category Spend Distribution (with operational burn normalization).
-* **`components/CapitalSimulator.tsx`**
-  * **Status:** Active
-  * **Purpose:** Interactive execution component modeling the Order of Operations cascade (wiping Step 2 debt, locking Step 3 6-month HYSA reserve, allocating Step 4 surplus). Models 20-year compound wealth delta against index funds (8.0%) vs. idle cash (1.5%).
-* **`components/SettingsDrawer.tsx`**
-  * **Status:** Active
-  * **Purpose:** Slide-over modal interface managing user profile benchmarks (salary, retirement horizon, EF months) and direct upstream paystub ingestion without terminal commands.
-* **`components/PlaidLinkButton.tsx`**
-  * **Status:** Active
-  * **Purpose:** Triggers `/api/plaid/create-link-token`, opens Plaid Link modal, and routes `public_token` to `/api/plaid/exchange-token`.
-* **`components/PaystubDropzone.tsx`**
-  * **Status:** Active
-  * **Purpose:** Drag-and-drop multimodal interface for uploading PDF/image paystubs for automated Gemini Vision OCR extraction.
+### Core utilities & security
+* **`lib/supabase.ts`** — Browser/anon client export; `getServiceSupabase()` is a server-only re-export guard (prefer `lib/supabase-admin.ts`).
+* **`lib/supabase-admin.ts`** — Service-role client (bypasses RLS; server-only).
+* **`lib/supabase-server.ts`** / **`lib/supabase-browser.ts`** — SSR and browser Auth helpers.
+* **`lib/plaid.ts`** — Plaid SDK client (`PLAID_ENV`).
+* **`lib/crypto.ts`** — AES-256-GCM token encrypt/decrypt; **fail-closed** (no silent plaintext fallback).
+* **`lib/stripe.ts`** — Stripe SDK helper (secret key + price id + app URL).
+* **`lib/auth/require-user.ts`** — Session tenant derivation + admin allowlist.
+* **`lib/auth/require-entitlement.ts`** — Active/trialing subscription gate → 402.
+* **`lib/http/api-error.ts`** / **`lib/http/rate-limit.ts`** — Typed API errors + in-memory rate limits.
+* **`lib/plaid/classify.ts`** / **`lib/plaid/verify-webhook.ts`** — Deterministic PFC classify; JWT webhook verify.
+* **`lib/data/user-financials.ts`** — Shared tenant financial load for dashboard aggregates.
+* **`lib/analytics/*`** — Survival floor, wealth quota, intent helpers.
 
-### Application Pages & Routes
-* **`app/page.tsx`**
-  * **Status:** Active
-  * **Role:** Dashboard orchestrator. Binds accounts, transactions, `TelemetryGrid`, `CapitalSimulator`, `SettingsDrawer`, manual/auto sync triggers, and Gemini Pro Forensic Audit modal.
-* **`app/api/profile/route.ts`**
-  * **Status:** Active
-  * **Methods:** `GET` (reads `user_financial_profiles`), `POST` (upserts profile benchmarks).
-* **`app/api/audit/route.ts`**
-  * **Status:** Active
-  * **Purpose:** Aggregates live balances, baselines, snapshots, and paystubs with operational burn filters. Submits forensic payload to `gemini-3.6-flash` with exponential backoff handling for `503` spikes.
-* **`app/api/plaid/create-link-token/route.ts`**
-  * **Status:** Active
-  * **Purpose:** Issues Plaid link tokens configured with transaction sync products and webhook callback URLs.
-* **`app/api/plaid/exchange-token/route.ts`**
-  * **Status:** Active
-  * **Purpose:** Exchanges `public_token` for `access_token`, encrypts token via `lib/crypto.ts`, upserts `plaid_items`, and caches initial accounts.
-* **`app/api/plaid/sync-transactions/route.ts`**
-  * **Status:** Active
-  * **Purpose:** Executes delta pagination (`/transactions/sync`), decrypts item access tokens at runtime, updates account balances, and upserts transaction records.
-* **`app/api/plaid/webhook/route.ts`**
-  * **Status:** Active
-  * **Purpose:** Asynchronous webhook listener processing `SYNC_UPDATES_AVAILABLE` events to sync transactions and balances automatically in the background.
-* **`app/api/telemetry/baseline/route.ts`**
-  * **Status:** Active
-  * **Purpose:** Computes Day-Zero pre-program financial baseline across 180 days of historical data and writes to `program_baselines`.
-* **`app/api/telemetry/snapshot/route.ts`**
-  * **Status:** Active
-  * **Purpose:** Snapshots end-of-month financial telemetry to `monthly_telemetry_snapshots` normalized to `YYYY-MM-01`.
-* **`app/api/telemetry/paystub/route.ts`**
-  * **Status:** Active
-  * **Purpose:** Ingests upstream payroll deductions into `paystub_records`, calculating effective tax drag %, pre-tax savings %, and take-home ratio.
-* **`app/api/telemetry/vision/route.ts`**
-  * **Status:** Active
-  * **Purpose:** Multimodal Gemini Vision OCR endpoint parsing PDF/image paystubs with retry logic and writing structured deductions to `paystub_records`.
-* **`app/api/admin/encrypt-existing-tokens/route.ts`**
-  * **Status:** Active (Administrative)
-  * **Purpose:** One-time migration endpoint sweeping legacy unencrypted Plaid access tokens and converting them to AES-256-GCM ciphertexts.
+### UI components
+* **`components/TelemetryGrid.tsx`** — Liquidity, debt, burn, category distribution.
+* **`components/CapitalSimulator.tsx`** — Work-Backwards cascade / opportunity-cost simulator.
+* **`components/SettingsDrawer.tsx`** — Profile benchmarks + paystub ingestion UI.
+* **`components/PlaidLinkButton.tsx`** — Link token → exchange flow.
+* **`components/PayStubDropzone.tsx`** — Paystub upload → `/api/telemetry/vision`.
+* **`components/AuditChatDrawer.tsx`** — Forensic sparring chat UI.
+* **`components/DayZeroIntake.tsx`** — Onboarding intake when profile missing.
+* **`components/ManualLiabilityCard.tsx`** — Offline liability tracking.
+* **`components/Dashboard/CashFlowCreepChart.tsx`** — Fixed vs discretionary vs offense.
+* **`components/Dashboard/NetWorthTrendChart.tsx`** — Net worth trend (on disk; may be WIP wiring).
+* **`components/Dashboard/WealthMatrixChart.tsx`** — Macro projection UI (on disk; Week 4 polish still open).
+
+**Not built (do not claim Active):** `SavingsRatioCard`, `SubscriptionAuditCard`.
+
+### Application pages
+* **`app/page.tsx`** — Dashboard / Command Center orchestrator.
+* **`app/login/page.tsx`** — Auth + invite-gated signup.
+* **`app/privacy/page.tsx`** / **`app/terms/page.tsx`** — Legal stubs (not counsel-reviewed).
+
+### API routes — Active
+* **`app/api/profile/route.ts`** — Profile GET/POST.
+* **`app/api/audit/route.ts`** / **`app/api/audit/chat/route.ts`** — Gemini audit + sparring (entitlement-gated).
+* **`app/api/plaid/create-link-token/route.ts`** — Link tokens.
+* **`app/api/plaid/exchange-token/route.ts`** — Public→access token; encrypt; upsert item/accounts.
+* **`app/api/plaid/sync-transactions/route.ts`** — Cursor delta sync + classify; default resume cursor.
+* **`app/api/plaid/webhook/route.ts`** — Signed webhook; sync only (no Gemini).
+* **`app/api/baseline/route.ts`** — Day-zero / baseline telemetry (**not** `telemetry/baseline`).
+* **`app/api/snapshot/route.ts`** — Snapshot writer (**not** `telemetry/snapshot`).
+* **`app/api/telemetry/dashboard/route.ts`** — Server dashboard aggregates.
+* **`app/api/telemetry/vision/route.ts`** — Paystub OCR (entitlement-gated).
+* **`app/api/telemetry/transactions/route.ts`** — Gemini classify batch (entitlement-gated).
+* **`app/api/telemetry/rse/route.ts`** — RSE-related telemetry.
+* **`app/api/telemetry/windfalls/route.ts`** — Capital windfalls API (on disk).
+* **`app/api/manual-accounts/route.ts`** — Manual liabilities API (on disk).
+* **`app/api/billing/checkout/route.ts`** / **`app/api/billing/webhook/route.ts`** — Stripe Checkout + signed webhook.
+* **`app/api/account/export/route.ts`** / **`app/api/account/delete/route.ts`** — Session-scoped export/delete.
+* **`app/api/admin/encrypt-existing-tokens/route.ts`** — Admin token encryption sweep.
+
+### Removed / false paths (do not list as Active)
+* ~~`app/api/telemetry/baseline`~~ → use `app/api/baseline`
+* ~~`app/api/telemetry/snapshot`~~ → use `app/api/snapshot`
+* ~~`app/api/telemetry/paystub`~~ → use vision + settings flows
 
 ---
 
 ## 3. DATABASE SCHEMA REGISTRY (SUPABASE)
 
-```sql
--- 1. Financial Accounts (Balance Sheet Telemetry)
-CREATE TABLE financial_accounts (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    user_id UUID DEFAULT '00000000-0000-0000-0000-000000000000',
-    plaid_account_id TEXT UNIQUE NOT NULL,
-    account_name TEXT NOT NULL,
-    account_type TEXT NOT NULL,
-    account_subtype TEXT,
-    current_balance NUMERIC(12, 2) NOT NULL DEFAULT 0.00,
-    available_balance NUMERIC(12, 2),
-    currency_code TEXT DEFAULT 'USD',
-    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
-);
+**Source of truth:** `SCHEMA.md` and `supabase/migrations/` (including RLS, composite snapshot uniques, subscription columns on `user_financial_profiles`).
 
--- 2. Transactions (Granular Inflow/Outflow Telemetry)
-CREATE TABLE transactions (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    plaid_transaction_id TEXT UNIQUE NOT NULL,
-    account_id TEXT NOT NULL,
-    name TEXT NOT NULL,
-    merchant_name TEXT,
-    amount NUMERIC(10, 2) NOT NULL,
-    date DATE NOT NULL,
-    category TEXT,
-    pending BOOLEAN DEFAULT FALSE,
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
-);
+Do not treat the old inline SQL dump in prior ledger revisions as authoritative. Notable live concerns documented in `SCHEMA.md`: tenant `user_id` scoping, snapshot composite uniques, Stripe entitlement columns (`stripe_customer_id`, `stripe_subscription_id`, `subscription_status`).
 
--- 3. Plaid Items (Encrypted Institution Access & Sync State)
-CREATE TABLE plaid_items (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    item_id TEXT UNIQUE NOT NULL,
-    access_token TEXT NOT NULL, -- Encrypted AES-256-GCM format (iv:tag:ciphertext)
-    institution_id TEXT,
-    institution_name TEXT,
-    next_cursor TEXT,
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
-);
+---
 
--- 4. User Financial Profiles (Retirement & Benchmarks)
-CREATE TABLE user_financial_profiles (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    user_id UUID UNIQUE DEFAULT '00000000-0000-0000-0000-000000000000',
-    current_age INTEGER DEFAULT 35,
-    target_retirement_age INTEGER DEFAULT 55,
-    annual_gross_salary NUMERIC(12, 2) NOT NULL DEFAULT 140000.00,
-    annual_bonus_target NUMERIC(12, 2) DEFAULT 0.00,
-    target_emergency_months INTEGER DEFAULT 6,
-    marginal_tax_bracket NUMERIC(4, 2) DEFAULT 24.00,
-    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
-);
+## 4. PROJECT ROADMAP & EXECUTION STATUS
 
--- 5. Program Baselines (Pre-Audit Day-Zero Marker)
-CREATE TABLE program_baselines (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    user_id UUID UNIQUE DEFAULT '00000000-0000-0000-0000-000000000000',
-    onboarding_date DATE NOT NULL DEFAULT CURRENT_DATE,
-    baseline_avg_monthly_burn NUMERIC(12, 2) NOT NULL DEFAULT 0.00,
-    baseline_discretionary_burn NUMERIC(12, 2) NOT NULL DEFAULT 0.00,
-    baseline_fixed_burn NUMERIC(12, 2) NOT NULL DEFAULT 0.00,
-    baseline_revolving_debt NUMERIC(12, 2) NOT NULL DEFAULT 0.00,
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
-);
+### Phases 1–5 — Core product (COMPLETE)
+Core Plaid link/sync, telemetry UI, forensic audit, baselines/snapshots (now at `/api/baseline` + `/api/snapshot`), paystub vision OCR, profile + CapitalSimulator + SettingsDrawer, AES-256-GCM tokens, Plaid webhook receiver, operational burn normalization.
 
--- 6. Monthly Telemetry Snapshots (Historical Rollups)
-CREATE TABLE monthly_telemetry_snapshots (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    user_id UUID DEFAULT '00000000-0000-0000-0000-000000000000',
-    snapshot_date DATE NOT NULL,
-    liquid_capital NUMERIC(12, 2) NOT NULL DEFAULT 0.00,
-    revolving_debt NUMERIC(12, 2) NOT NULL DEFAULT 0.00,
-    net_liquidity NUMERIC(12, 2) NOT NULL DEFAULT 0.00,
-    total_burn NUMERIC(12, 2) NOT NULL DEFAULT 0.00,
-    top_categories JSONB DEFAULT '{}'::jsonb,
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-    CONSTRAINT unique_user_snapshot UNIQUE (user_id, snapshot_date)
-);
+### Phase 6 — Multi-tenancy & production ops
+* **[x] 6.1** Auth + RLS binding; invite-gated signup; session-scoped APIs via `requireUser` / `.eq('user_id')`.
+* **[x] 6.2a** Plaid webhook JWT signature verification (`lib/plaid/verify-webhook.ts`).
+* **[ ] 6.2b** Formal Plaid Production dashboard cutover / webhook URL ops (env-dependent; code supports `PLAID_ENV=production`).
+* **[ ] 6.3** Vercel Cron nightly background sync.
 
--- 7. Paystub Records (Upstream Tax & Deductions)
-CREATE TABLE paystub_records (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    user_id UUID DEFAULT '00000000-0000-0000-0000-000000000000',
-    pay_period_start DATE NOT NULL,
-    pay_period_end DATE NOT NULL,
-    pay_date DATE NOT NULL,
-    gross_pay NUMERIC(12, 2) NOT NULL,
-    net_pay NUMERIC(12, 2) NOT NULL,
-    federal_tax_withheld NUMERIC(12, 2) NOT NULL DEFAULT 0.00,
-    state_tax_withheld NUMERIC(12, 2) NOT NULL DEFAULT 0.00,
-    fica_medicare_tax NUMERIC(12, 2) NOT NULL DEFAULT 0.00,
-    pre_tax_401k NUMERIC(12, 2) NOT NULL DEFAULT 0.00,
-    post_tax_roth_401k NUMERIC(12, 2) NOT NULL DEFAULT 0.00,
-    employer_401k_match NUMERIC(12, 2) NOT NULL DEFAULT 0.00,
-    hsa_contribution NUMERIC(12, 2) NOT NULL DEFAULT 0.00,
-    healthcare_premiums NUMERIC(12, 2) NOT NULL DEFAULT 0.00,
-    other_deductions NUMERIC(12, 2) NOT NULL DEFAULT 0.00,
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
-);
-4. PROJECT ROADMAP & EXECUTION STATUS
-PHASE 1: Real-Time Telemetry & Core Audit Engine
-[x] Task 1.1: Setup Plaid Link flow and exchange token route.
+### Week 1–3 SaaS hardening (AGENT_BRIEFS) — largely COMPLETE in code
+Invite gate, hardcode scrub, snapshot unify, classify-in-sync, cursor default, dashboard aggregates, rate limits, Stripe checkout + webhook + Gemini entitlement (402), privacy/terms + export/delete, ECE branding. **Live Stripe Product/Price/webhook go-live deferred** until pricing and public URL are final.
 
-[x] Task 1.2: Implement Supabase financial_accounts and transactions tables.
+### Week 4 differentiation (NOT started / not shipped)
+* Account exclusion from net worth (UGMA / non-operational).
+* Profile setup / recalculate API polish.
+* Savings ratio + subscription leak engine UI (**no** `SavingsRatioCard` / `SubscriptionAuditCard` files yet).
+* WealthMatrix polish / Rule-of-25 productization.
+* Affiliate / balance-transfer layer (optional).
 
-[x] Task 1.3: Build TelemetryGrid component for liquidity, debt, burn, and category metrics.
+---
 
-[x] Task 1.4: Create plaid_items table and build cursor-based /api/plaid/sync-transactions route.
+## 5. RUNBOOK / RECOVERY GUIDE
 
-[x] Task 1.5: Build Elite Capital Engine forensic audit engine on gemini-3.6-flash with exponential backoff.
+### Environment
+Copy `.env.example` → `.env.local` and fill values (never commit secrets).
 
-[x] Task 1.6: Wire automatic background sync and on-demand sync button in the UI.
+Required / common keys:
+`NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`, `PLAID_CLIENT_ID`, `PLAID_SECRET`, `PLAID_ENV`, `PLAID_WEBHOOK_URL`, `GEMINI_API_KEY`, `ENCRYPTION_KEY`, `NEXT_PUBLIC_INVITE_CODE`, `ADMIN_EMAILS`, `NEXT_PUBLIC_APP_URL`, `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, `STRIPE_PRICE_ID` (Stripe optional until go-live), `SENTRY_DSN` (Week 3 Day 4).
 
-PHASE 2: Longitudinal Memory & Pre-Program Baseline Analysis
-[x] Task 2.1: Pre-Program Baseline Ingestion (program_baselines and /api/telemetry/baseline).
-
-[x] Task 2.2: Monthly Telemetry Snapshot Table (monthly_telemetry_snapshots and /api/telemetry/snapshot).
-
-[x] Task 2.3: Temporal Trend Prompt Injection into app/api/audit/route.ts with compliance grading.
-
-PHASE 3: Upstream Paystub Telemetry & True Tax Drag Tracking
-[x] Task 3.1: Paystub & Deduction Schema (paystub_records).
-
-[x] Task 3.2: Paystub Ingestion Route (/api/telemetry/paystub).
-
-[x] Task 3.3: Upstream Tax Drag & Match Capture Auditing integrated into Gemini audit engine.
-
-[x] Task 3.4: Multimodal Paystub Ingestion (accepting PDF/images via Gemini Vision OCR).
-
-PHASE 4: User Financial Profile & Capital Allocation Simulator
-[x] Task 4.1: User Profile Schema (user_financial_profiles and /api/profile).
-
-[x] Task 4.2: Dynamic Target Calculation Engine (20% Wealth Rule Quotas & dynamic EF ceilings).
-
-[x] Task 4.3: Opportunity Cost & Cash Drag Simulator UI (CapitalSimulator.tsx).
-
-[x] Task 4.4: UI Settings Drawer (SettingsDrawer.tsx) for direct profile and paystub mutations.
-
-PHASE 5: Production Hardening & Advanced Automation
-[x] Task 5.1: Security & Token Encryption (AES-256-GCM via lib/crypto.ts and automated token migration).
-
-[x] Task 5.2: Real-Time Plaid Webhook Receiver (/api/plaid/webhook).
-
-[x] Task 5.3: Operational Burn Normalization (filter internal transfers/payments from emergency fund ceiling).
-
-[x] Task 5.4: Component Path Cleanup (consolidate component directory paths).
-
-PHASE 6: Production Endgame & Multi-Tenancy (Active)
-[x] Task 6.1: Supabase Auth & RLS Binding (replace zero-UUID placeholder with active user session contexts).
-
-[ ] Task 6.2: Plaid Production Environment Migration & Webhook Signature Verification.
-
-[ ] Task 6.3: Vercel Cron Automated Nightly Background Sync.
-
-5. RUNBOOK / RECOVERY GUIDE
-Resuming Development
-Verify Environment Variables (.env.local):
-
-NEXT_PUBLIC_SUPABASE_URL
-
-NEXT_PUBLIC_SUPABASE_ANON_KEY
-
-SUPABASE_SERVICE_ROLE_KEY
-
-PLAID_CLIENT_ID
-
-PLAID_SECRET
-
-PLAID_ENV=sandbox
-
-GEMINI_API_KEY
-
-ENCRYPTION_KEY (64-hex / 32-byte secret)
-
-PLAID_WEBHOOK_URL
-
-Start Development Server:
-
-PowerShell
+### Dev server
+```powershell
 npm run dev
-Operational Verification:
+```
+Load `http://localhost:3000`.
 
-Load http://localhost:3000.
+### Smoke checks
+1. Sign in (invite code required for signup).
+2. Configure Targets → profile save.
+3. Sync Telemetry → HTTP 200 / balances refresh.
+4. For Gemini audit/chat/vision: set `user_financial_profiles.subscription_status = 'active'` (or complete Stripe checkout when wired).
+5. Run Gemini Audit / Sparring Chat → disclaimer visible; output renders.
+6. `/privacy` and `/terms` reachable without session.
 
-Click Configure Targets → Verify profile benchmarks fetch and save cleanly.
+---
 
-Click Sync Telemetry → Confirm background delta sync and balance refresh complete with HTTP 200.
+## 6. HISTORICAL LOG (abbreviated)
 
-Click Run Gemini Audit → Verify all 5 forensic sections render against the pre-program baseline and gross income target.
-
-6. HISTORICAL LOG OF COMPLETED MILESTONES
-September 6, 2026 — Phase 2 to Phase 5 Full-Stack Deployment
-
-Baseline Ingestion: Created program_baselines and /api/telemetry/baseline to establish Day-Zero burn rates.
-
-Longitudinal Memory: Created monthly_telemetry_snapshots and /api/telemetry/snapshot to record monthly balances.
-
-Upstream Payroll Tracking: Deployed paystub_records and Gemini Vision OCR (/api/telemetry/vision) for tax drag and deduction extraction.
-
-Profile Configuration & Simulator: Implemented user_financial_profiles and CapitalSimulator.tsx to simulate Order of Operations debt elimination.
-
-Security Hardening: Deployed AES-256-GCM token encryption via lib/crypto.ts and automated migration scripts.
-
-Automated Webhooks: Implemented /api/plaid/webhook to handle background sync events.
+* **Sep 2026:** Phases 2–5 — baselines, snapshots, paystubs/vision, profile + simulator, crypto, Plaid webhook.
+* **Nov 2026 Weeks 1–2:** Multi-tenant hardening — classifier tenant fix, sync `user_id`, webhook JWT, schema/RLS migrations, invite gate, snapshot unify, classify-in-sync, cursor resume, dashboard API, rate limits.
+* **Nov 2026 Week 3:** Stripe skeleton + entitlement, legal stubs + export/delete, ECE branding scrub, ledger reconciliation + `.env.example`.
