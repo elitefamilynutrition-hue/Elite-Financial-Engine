@@ -1,13 +1,13 @@
 /**
  * Single source of truth for how a transaction is bucketed.
  *
- * Before this module existed, three places (TelemetryGrid, CashFlowCreepChart,
- * /api/baseline) each re-implemented the same rules slightly differently, so the
- * same transaction could be "survival" on one screen and "creep" on another.
- * Every consumer — server and client — must import from here.
+ * Precedence: user override → explicit DB intent → transfer flags → keywords → survival default.
+ * Creep is a deviation warning and never feeds the Survival Floor.
  */
 
 export type TransactionIntent = 'survival' | 'creep' | 'offense' | 'transfer';
+
+export type OverrideReason = 'one_off' | 'reimbursed' | 'business' | 'miscategorized';
 
 export interface ClassifiableTransaction {
   amount: number | string | null;
@@ -16,6 +16,10 @@ export interface ClassifiableTransaction {
   category?: string | null;
   transaction_intent?: string | null;
   is_internal_transfer?: boolean | null;
+  user_intent_override?: string | null;
+  exclude_from_burn?: boolean | null;
+  override_reason?: string | null;
+  pending?: boolean | null;
 }
 
 /** Keywords that indicate the outflow is NOT baseline living cost. */
@@ -45,6 +49,8 @@ export const NON_OPERATIONAL_KEYWORDS: readonly string[] = [
   'payroll',
   'brokerage',
   'down payment',
+  'thank you',
+  'autopay',
 ];
 
 /**
@@ -68,27 +74,39 @@ export function matchesAny(tx: ClassifiableTransaction, keywords: readonly strin
   return keywords.some((keyword) => text.includes(keyword));
 }
 
+function asIntent(value: string | null | undefined): TransactionIntent | null {
+  if (value === 'transfer' || value === 'offense' || value === 'creep' || value === 'survival') {
+    return value;
+  }
+  return null;
+}
+
 /** True when the row represents money moving between the user's own accounts. */
 export function isInternalTransfer(tx: ClassifiableTransaction): boolean {
   if (tx.is_internal_transfer) return true;
+  if (asIntent(tx.user_intent_override) === 'transfer') return true;
   if (tx.transaction_intent === 'transfer') return true;
+  if (PLAID_TRANSFER_CATEGORIES.some((c) => (tx.category || '').toUpperCase().includes(c))) {
+    return true;
+  }
   return matchesAny(tx, NON_OPERATIONAL_KEYWORDS);
 }
 
 /**
  * Resolves the bucket for a single transaction.
- *
- * Precedence: explicit DB classification wins, then internal-transfer detection,
- * then a keyword fallback, then unclassified rows default to `survival` (the
- * conservative choice: overstating the survival floor is safer than hiding spend
- * from the user).
+ * User override always wins when set.
  */
 export function resolveIntent(tx: ClassifiableTransaction): TransactionIntent {
-  const explicit = tx.transaction_intent as TransactionIntent | null | undefined;
+  const override = asIntent(tx.user_intent_override);
+  if (override) return override;
 
-  if (explicit === 'transfer' || explicit === 'offense' || explicit === 'creep' || explicit === 'survival') {
-    return explicit;
+  // Reimbursed / business without an explicit intent → treat as transfer (non-lifestyle).
+  if (tx.override_reason === 'reimbursed' || tx.override_reason === 'business') {
+    return 'transfer';
   }
+
+  const explicit = asIntent(tx.transaction_intent);
+  if (explicit) return explicit;
 
   if (tx.is_internal_transfer) return 'transfer';
   if (matchesAny(tx, NON_OPERATIONAL_KEYWORDS)) return 'transfer';
@@ -97,11 +115,30 @@ export function resolveIntent(tx: ClassifiableTransaction): TransactionIntent {
   return 'survival';
 }
 
-/** Only outflows from the survival bucket count toward the emergency floor. */
+/** Excluded from Category Burn and Survival Floor analytics. */
+export function isExcludedFromBurn(tx: ClassifiableTransaction): boolean {
+  if (tx.exclude_from_burn) return true;
+  const reason = tx.override_reason;
+  return reason === 'one_off' || reason === 'reimbursed' || reason === 'business';
+}
+
+/** Only survival-bucket outflows that are not disputed away. */
 export function isSurvivalSpend(tx: ClassifiableTransaction): boolean {
   const amount = Number(tx.amount || 0);
   if (amount <= 0) return false;
+  if (isExcludedFromBurn(tx)) return false;
+  if (tx.pending) return false;
   return resolveIntent(tx) === 'survival';
+}
+
+/** Counts toward Category Burn bars (survival + creep, not transfer/offense/excluded). */
+export function countsTowardCategoryBurn(tx: ClassifiableTransaction): boolean {
+  const amount = Number(tx.amount || 0);
+  if (amount <= 0) return false;
+  if (isExcludedFromBurn(tx)) return false;
+  if (tx.pending) return false;
+  const intent = resolveIntent(tx);
+  return intent === 'survival' || intent === 'creep';
 }
 
 export function isWithinWindow(date: string | null | undefined, since: Date): boolean {

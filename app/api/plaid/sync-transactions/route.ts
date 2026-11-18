@@ -137,8 +137,15 @@ export async function POST(request: NextRequest) {
           cursor = data.next_cursor;
 
           // Classify via Plaid personal_finance_category (not bank-name heuristics).
+          // Pending→posted: Plaid issues a new transaction_id and sets pending_transaction_id
+          // to the old pending id. Delete that pending row so burn/ledger are not doubled.
+          const pendingIdsToDrop: string[] = [];
           const toUpsert = [...added, ...modified].map((tx) => {
             const classified = classifyPlaidTransaction(tx);
+            const pendingParentId =
+              !tx.pending && tx.pending_transaction_id ? tx.pending_transaction_id : null;
+            if (pendingParentId) pendingIdsToDrop.push(pendingParentId);
+
             return {
               user_id: item.user_id,
               plaid_transaction_id: tx.transaction_id,
@@ -149,6 +156,7 @@ export async function POST(request: NextRequest) {
               date: tx.date,
               category: toCategoryString(tx),
               pending: tx.pending,
+              pending_transaction_id: pendingParentId,
               is_internal_transfer: classified.is_internal_transfer,
               transaction_intent: classified.transaction_intent,
             };
@@ -159,6 +167,15 @@ export async function POST(request: NextRequest) {
               .from('transactions')
               .upsert(toUpsert, { onConflict: 'plaid_transaction_id' });
             if (txError) console.error('Error upserting transactions:', txError);
+          }
+
+          if (pendingIdsToDrop.length > 0) {
+            await supabase
+              .from('transactions')
+              .delete()
+              .in('plaid_transaction_id', pendingIdsToDrop)
+              .eq('user_id', item.user_id)
+              .eq('pending', true);
           }
 
           if (removed.length > 0) {
@@ -243,6 +260,39 @@ export async function POST(request: NextRequest) {
         console.error(`Error syncing item ${item.item_id}:`, errorMsg);
         errors.push(`Item ${item.item_id}: ${errorMsg}`);
       }
+    }
+
+    // Safety net: drop leftover pending rows that match a posted twin
+    // (same account/date/amount) when Plaid omitted pending_transaction_id.
+    try {
+      const { data: pendingRows } = await supabase
+        .from('transactions')
+        .select('id, account_id, date, amount, name')
+        .eq('user_id', user.id)
+        .eq('pending', true)
+        .limit(200);
+
+      for (const pending of pendingRows || []) {
+        const { data: twin } = await supabase
+          .from('transactions')
+          .select('id')
+          .eq('user_id', user.id)
+          .eq('pending', false)
+          .eq('account_id', pending.account_id)
+          .eq('date', pending.date)
+          .eq('amount', pending.amount)
+          .neq('id', pending.id)
+          .limit(1)
+          .maybeSingle();
+        if (twin) {
+          await supabase.from('transactions').delete().eq('id', pending.id).eq('user_id', user.id);
+        }
+      }
+    } catch (cleanupErr: unknown) {
+      console.warn(
+        '[Plaid Sync] Pending twin cleanup skipped:',
+        cleanupErr instanceof Error ? cleanupErr.message : cleanupErr
+      );
     }
 
     return NextResponse.json({

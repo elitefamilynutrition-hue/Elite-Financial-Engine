@@ -21,10 +21,19 @@ const INTERNAL_TRANSFER_DETAILED = new Set([
   'TRANSFER_OUT_ACCOUNT_TRANSFER',
   'TRANSFER_OUT_SAVINGS',
   'TRANSFER_IN_ACCOUNT_TRANSFER',
+  'TRANSFER_IN_DEPOSIT',
   'LOAN_PAYMENTS_CREDIT_CARD_PAYMENT',
 ]);
 
-const OFFENSE_PREFIXES = ['TRANSFER_OUT_INVESTMENT_AND_RETIREMENT_FUNDS', 'LOAN_PAYMENTS_'];
+const INTERNAL_TRANSFER_PRIMARY = new Set(['TRANSFER_IN', 'TRANSFER_OUT']);
+
+const OFFENSE_PREFIXES = ['TRANSFER_OUT_INVESTMENT_AND_RETIREMENT_FUNDS'];
+
+/** Credit-card / loan payment subtypes that are balance transfers, not lifestyle spend. */
+const LOAN_PAYMENT_TRANSFER_DETAILED = new Set([
+  'LOAN_PAYMENTS_CREDIT_CARD_PAYMENT',
+  'LOAN_PAYMENTS_MORTGAGE_PAYMENT',
+]);
 
 const SURVIVAL_DETAILED = new Set([
   'FOOD_AND_DRINK_GROCERIES',
@@ -73,11 +82,36 @@ export function classifyPlaidTransaction(tx: Transaction): ClassifiedTransaction
     return { is_internal_transfer: false, transaction_intent: 'survival' };
   }
 
-  if (detailed && INTERNAL_TRANSFER_DETAILED.has(detailed)) {
+  if (
+    (detailed && INTERNAL_TRANSFER_DETAILED.has(detailed)) ||
+    (detailed && LOAN_PAYMENT_TRANSFER_DETAILED.has(detailed)) ||
+    (primary && INTERNAL_TRANSFER_PRIMARY.has(primary))
+  ) {
+    return { is_internal_transfer: true, transaction_intent: 'transfer' };
+  }
+
+  // Name heuristics for CC autopay when PFC is missing/generic.
+  const nameBlob = `${tx.name || ''} ${tx.merchant_name || ''}`.toLowerCase();
+  if (
+    nameBlob.includes('payment thank you') ||
+    nameBlob.includes('autopay') ||
+    nameBlob.includes('credit card payment') ||
+    (nameBlob.includes('payment to') &&
+      (nameBlob.includes('amex') ||
+        nameBlob.includes('american express') ||
+        nameBlob.includes('chase') ||
+        nameBlob.includes('citi') ||
+        nameBlob.includes('capital one')))
+  ) {
     return { is_internal_transfer: true, transaction_intent: 'transfer' };
   }
 
   if (detailed && OFFENSE_PREFIXES.some((prefix) => detailed.startsWith(prefix))) {
+    return { is_internal_transfer: false, transaction_intent: 'offense' };
+  }
+
+  if (primary === 'LOAN_PAYMENTS' && detailed && !LOAN_PAYMENT_TRANSFER_DETAILED.has(detailed)) {
+    // Other loan payments (student, auto) → offense / debt destruction, not burn.
     return { is_internal_transfer: false, transaction_intent: 'offense' };
   }
 

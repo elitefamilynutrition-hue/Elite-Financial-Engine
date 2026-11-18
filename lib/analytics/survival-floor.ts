@@ -4,9 +4,9 @@ import { isSurvivalSpend, isWithinWindow } from '@/lib/analytics/intent';
  * The Survival Floor: how much cash the user needs to survive `targetMonths`
  * with no income.
  *
- * This is the headline number of the whole product, so it lives in exactly one
- * place. `/api/baseline`, `/api/snapshot`, and the audit all call this function;
- * none of them are allowed to re-derive it.
+ * Counts only the survival bucket (baseline living costs). Creep is excluded
+ * on purpose — it is a deviation warning, not part of the emergency floor.
+ * Annualized from up to 90 days of data using actual coverage in-window.
  */
 
 export const SURVIVAL_WINDOW_DAYS = 90;
@@ -20,6 +20,10 @@ interface SpendingTransaction {
   category?: string | null;
   transaction_intent?: string | null;
   is_internal_transfer?: boolean | null;
+  user_intent_override?: string | null;
+  exclude_from_burn?: boolean | null;
+  override_reason?: string | null;
+  pending?: boolean | null;
 }
 
 export interface SinkingFund {
@@ -71,20 +75,39 @@ export function computeSurvivalFloor({
   const windowStart = new Date(now);
   windowStart.setDate(windowStart.getDate() - SURVIVAL_WINDOW_DAYS);
 
+  let oldestInWindow: Date | null = null;
+  let newestInWindow: Date | null = null;
+
   const survivalSpend = transactions.reduce((total, tx) => {
     if (!isWithinWindow(tx.date, windowStart)) return total;
     if (!isSurvivalSpend(tx)) return total;
+
+    const parsed = new Date(tx.date as string);
+    if (!Number.isNaN(parsed.getTime())) {
+      if (!oldestInWindow || parsed < oldestInWindow) oldestInWindow = parsed;
+      if (!newestInWindow || parsed > newestInWindow) newestInWindow = parsed;
+    }
+
     return total + Number(tx.amount || 0);
   }, 0);
 
-  const baseMonthlyBurn = survivalSpend / (SURVIVAL_WINDOW_DAYS / 30);
+  // Annualize from actual coverage inside the window (not a fixed 90),
+  // so sparse history does not look like a "weekly" understatement.
+  let coveredDays = SURVIVAL_WINDOW_DAYS;
+  if (oldestInWindow && newestInWindow) {
+    const spanMs = newestInWindow.getTime() - oldestInWindow.getTime();
+    const spanDays = Math.floor(spanMs / (1000 * 60 * 60 * 24)) + 1;
+    coveredDays = Math.max(7, Math.min(SURVIVAL_WINDOW_DAYS, spanDays));
+  }
+
+  const baseMonthlyBurn = survivalSpend / (coveredDays / 30);
   const pad = monthlySinkingPad(sinkingFunds);
   const monthlyBurnRate = baseMonthlyBurn + pad;
 
   const months = Number(targetMonths) > 0 ? Number(targetMonths) : DEFAULT_TARGET_MONTHS;
 
   return {
-    window_days: SURVIVAL_WINDOW_DAYS,
+    window_days: coveredDays,
     survival_spend: round2(survivalSpend),
     base_monthly_burn: round2(baseMonthlyBurn),
     monthly_sinking_pad: round2(pad),

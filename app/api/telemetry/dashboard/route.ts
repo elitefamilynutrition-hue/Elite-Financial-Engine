@@ -7,7 +7,7 @@ import { computeSurvivalFloor } from '@/lib/analytics/survival-floor';
 import { computeWealthQuota } from '@/lib/analytics/wealth-quota';
 
 const RECENT_TX_DAYS = 90;
-const RECENT_TX_LIMIT = 200;
+const RECENT_TX_LIMIT = 500;
 
 /**
  * Session-scoped dashboard payload: accounts + recent txs + baseline telemetry.
@@ -26,7 +26,7 @@ export async function GET() {
     const { data: recentTx, error: txError } = await supabase
       .from('transactions')
       .select(
-        'id, amount, category, date, name, merchant_name, transaction_intent, is_internal_transfer, account_id'
+        'id, amount, category, date, name, merchant_name, transaction_intent, is_internal_transfer, account_id, pending, user_intent_override, exclude_from_burn, override_reason, reimbursement_tx_id'
       )
       .eq('user_id', user.id)
       .gte('date', sinceIso)

@@ -3,6 +3,7 @@ import { plaidClient } from '@/lib/plaid';
 import { getServiceSupabase } from '@/lib/supabase-admin';
 import { decryptToken } from '@/lib/crypto';
 import { syncAccountsForItem } from '@/lib/plaid/sync-accounts';
+import { classifyPlaidTransaction, toCategoryString } from '@/lib/plaid/classify';
 import {
   claimWebhookDelivery,
   getWebhookIdempotencyKey,
@@ -86,20 +87,40 @@ export async function POST(req: Request) {
         hasMore = data.has_more;
         cursor = data.next_cursor;
 
-        const toUpsert = [...data.added, ...data.modified].map((tx) => ({
-          user_id: item.user_id,
-          plaid_transaction_id: tx.transaction_id,
-          account_id: tx.account_id,
-          name: tx.name,
-          merchant_name: tx.merchant_name || null,
-          amount: tx.amount,
-          date: tx.date,
-          category: tx.category ? tx.category.join(', ') : null,
-          pending: tx.pending,
-        }));
+        // Same pending→posted hygiene as /api/plaid/sync-transactions.
+        const pendingIdsToDrop: string[] = [];
+        const toUpsert = [...data.added, ...data.modified].map((tx) => {
+          const classified = classifyPlaidTransaction(tx);
+          const pendingParentId =
+            !tx.pending && tx.pending_transaction_id ? tx.pending_transaction_id : null;
+          if (pendingParentId) pendingIdsToDrop.push(pendingParentId);
+          return {
+            user_id: item.user_id,
+            plaid_transaction_id: tx.transaction_id,
+            account_id: tx.account_id,
+            name: tx.name,
+            merchant_name: tx.merchant_name || null,
+            amount: tx.amount,
+            date: tx.date,
+            category: toCategoryString(tx),
+            pending: tx.pending,
+            pending_transaction_id: pendingParentId,
+            is_internal_transfer: classified.is_internal_transfer,
+            transaction_intent: classified.transaction_intent,
+          };
+        });
 
         if (toUpsert.length > 0) {
           await supabase.from('transactions').upsert(toUpsert, { onConflict: 'plaid_transaction_id' });
+        }
+
+        if (pendingIdsToDrop.length > 0) {
+          await supabase
+            .from('transactions')
+            .delete()
+            .in('plaid_transaction_id', pendingIdsToDrop)
+            .eq('user_id', item.user_id)
+            .eq('pending', true);
         }
 
         if (data.removed.length > 0) {

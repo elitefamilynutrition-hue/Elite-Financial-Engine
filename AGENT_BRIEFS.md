@@ -213,6 +213,16 @@ Fix app metadata away from "Create Next App".
 - [x] Committed
 ---
 ## WEEK 4 — P3 Differentiation
+
+### Shipped early — Category burn UX + dispute (unscheduled)
+**Shipped**
+- Category Burn rolls up to ~8 display buckets (`lib/analytics/category-buckets.ts`); detailed PFC kept for drill-down
+- Click bucket → `CategoryBurnDrawer` filtered ledger (30d) with dispute/reclassify + optional reimbursement link
+- Migration `20261117000000_transaction_overrides.sql` + `PATCH /api/transactions/[id]/override`
+- Intent precedence: user override → classify; one-off/reimbursed/business excluded from burn; Survival Floor remains survival-only
+- Sync/webhook pending→posted hygiene via `pending_transaction_id`; CC payments stay transfers
+- Ledger uses humanized category labels
+
 ### Day 1 — Account exclusion (Phase 7.2)
 **Ask**
 How should UGMA/non-operational accounts be excluded from net worth with minimal schema change? Propose field name + filter point in loadUserFinancials. Do not edit.
@@ -326,6 +336,7 @@ Stop. Do not continue into other issues. Finish only the acceptance criteria alr
 | 3 | 3 Legal/export | ☑ |
 | 3 | 4 Sentry/CI | ☐ |
 | 3 | 5 Ledger/env | ☑ |
+| 4 | 0 Category burn UX | ☑ |
 | 4 | 1 Exclusions | ☐ |
 | 4 | 2 Profile APIs | ☐ |
 | 4 | 3 Savings/subs | ☐ |

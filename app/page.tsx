@@ -9,11 +9,14 @@ import CapitalSimulator from '@/components/CapitalSimulator';
 import SettingsDrawer from '@/components/SettingsDrawer';
 import { ManualLiabilityCard } from '@/components/ManualLiabilityCard';
 import { AuditChatDrawer } from '@/components/AuditChatDrawer';
+import { CategoryBurnDrawer } from '@/components/CategoryBurnDrawer';
 import DayZeroIntake from '@/components/DayZeroIntake';
 import { supabase } from '@/lib/supabase';
 import NetWorthTrendChart from '@/components/Dashboard/NetWorthTrendChart'; 
 import CashFlowCreepChart from '@/components/Dashboard/CashFlowCreepChart';
-import WealthMatrixChart from '@/components/Dashboard/WealthMatrixChart'; 
+import WealthMatrixChart from '@/components/Dashboard/WealthMatrixChart';
+import { formatCategoryLabel } from '@/lib/format/category-label';
+import type { CategoryBucketId } from '@/lib/analytics/category-buckets'; 
 
 function DashboardContent() {
   const searchParams = useSearchParams();
@@ -39,6 +42,7 @@ function DashboardContent() {
   const [userId, setUserId] = useState<string>('');
   const [isSnapshotting, setIsSnapshotting] = useState(false);
   const [isUpgrading, setIsUpgrading] = useState(false);
+  const [burnBucketId, setBurnBucketId] = useState<CategoryBucketId | null>(null);
 
   const handleSignOut = async () => {
     await supabase.auth.signOut();
@@ -50,9 +54,12 @@ function DashboardContent() {
     setIsUpgrading(true);
     try {
       const res = await fetch('/api/billing/checkout', { method: 'POST' });
-      const data = await res.json();
+      const data = await res.json().catch(() => ({}));
       if (!res.ok || !data.url) {
-        throw new Error(data.error || 'Checkout failed');
+        throw new Error(
+          data.error ||
+            'Checkout is not available yet. Stripe keys are not configured — billing is deferred until go-live.'
+        );
       }
       window.location.href = data.url;
     } catch (err: unknown) {
@@ -386,7 +393,11 @@ function DashboardContent() {
               {userId && <NetWorthTrendChart userId={userId} />}
               <CashFlowCreepChart transactions={transactions} />
             </div>
-            <TelemetryGrid accounts={accounts} transactions={transactions} />
+            <TelemetryGrid
+              accounts={accounts}
+              transactions={transactions}
+              onBucketClick={(bucketId) => setBurnBucketId(bucketId)}
+            />
             {userId && <WealthMatrixChart userId={userId} />}
             
             <section className="bg-zinc-900 border border-zinc-800 rounded-xl p-6 space-y-6">
@@ -422,6 +433,11 @@ function DashboardContent() {
                       <span className="text-2xl font-bold text-white">${Number(baselineTelemetry.survival_matrix.required_emergency_floor).toLocaleString('en-US', { minimumFractionDigits: 2 })}</span>
                       <span className="text-xs text-zinc-500">Target Cash</span>
                     </div>
+                    <p className="text-[11px] text-zinc-500">
+                      Based on {baselineTelemetry.survival_matrix.window_days || 90}-day survival burn (creep excluded)
+                      {' · '}
+                      ~${Number(baselineTelemetry.survival_matrix.monthly_baseline_burn || 0).toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}/mo
+                    </p>
                     
                     <div className="space-y-1 mt-2">
                       <div className="flex justify-between text-xs text-zinc-400 mb-1.5">
@@ -522,8 +538,15 @@ function DashboardContent() {
                     {transactions.map((tx) => (
                       <tr key={tx.id} className="hover:bg-zinc-800/40 transition">
                         <td className="p-4 text-zinc-400 font-mono text-xs">{tx.date}</td>
-                        <td className="p-4 font-medium text-zinc-200">{tx.name}</td>
-                        <td className="p-4 text-zinc-400 text-xs">{tx.category || 'General'}</td>
+                        <td className="p-4 font-medium text-zinc-200">
+                          {tx.name}
+                          {tx.exclude_from_burn ? (
+                            <span className="ml-2 text-[10px] text-amber-500">excluded</span>
+                          ) : null}
+                        </td>
+                        <td className="p-4 text-zinc-400 text-xs">
+                          {formatCategoryLabel(tx.category)}
+                        </td>
                         <td className={`p-4 text-right font-mono font-semibold ${tx.amount > 0 ? 'text-zinc-100' : 'text-emerald-400'}`}>
                           ${Number(tx.amount).toFixed(2)}
                         </td>
@@ -570,6 +593,25 @@ function DashboardContent() {
         isOpen={isChatOpen} 
         onClose={() => setIsChatOpen(false)} 
       />
+
+      {burnBucketId && (
+        <CategoryBurnDrawer
+          bucketId={burnBucketId}
+          transactions={transactions}
+          accountNameByPlaidId={
+            new Map(
+              accounts.map((a: { plaid_account_id?: string; account_name?: string; custom_name?: string }) => [
+                a.plaid_account_id || '',
+                a.custom_name || a.account_name || 'Account',
+              ])
+            )
+          }
+          onClose={() => setBurnBucketId(null)}
+          onOverrideSaved={() => {
+            fetchDashboardData();
+          }}
+        />
+      )}
     </main>
   );
 }

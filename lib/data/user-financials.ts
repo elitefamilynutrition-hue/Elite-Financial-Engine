@@ -42,6 +42,11 @@ export interface TransactionRow {
   pending: boolean | null;
   transaction_intent: string | null;
   is_internal_transfer: boolean | null;
+  user_intent_override?: string | null;
+  exclude_from_burn?: boolean | null;
+  override_reason?: string | null;
+  pending?: boolean | null;
+  reimbursement_tx_id?: string | null;
 }
 
 export interface FinancialProfile {
