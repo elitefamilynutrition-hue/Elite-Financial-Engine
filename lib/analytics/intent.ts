@@ -1,9 +1,11 @@
 /**
  * Single source of truth for how a transaction is bucketed.
  *
- * Precedence: user override → explicit DB intent → transfer flags → keywords → survival default.
+ * Precedence: user override → insurer remap → explicit DB intent → transfer flags → keywords → survival default.
  * Creep is a deviation warning and never feeds the Survival Floor.
  */
+
+import { isInsuranceMerchant } from '@/lib/analytics/merchants';
 
 export type TransactionIntent = 'survival' | 'creep' | 'offense' | 'transfer';
 
@@ -103,6 +105,14 @@ export function resolveIntent(tx: ClassifiableTransaction): TransactionIntent {
   // Reimbursed / business without an explicit intent → treat as transfer (non-lifestyle).
   if (tx.override_reason === 'reimbursed' || tx.override_reason === 'business') {
     return 'transfer';
+  }
+
+  // Insurers are survival even when Plaid/DB stored creep + GENERAL_SERVICES_INSURANCE.
+  if (
+    isInsuranceMerchant(tx.name, tx.merchant_name) ||
+    (tx.category || '').toUpperCase().includes('INSURANCE')
+  ) {
+    return 'survival';
   }
 
   const explicit = asIntent(tx.transaction_intent);

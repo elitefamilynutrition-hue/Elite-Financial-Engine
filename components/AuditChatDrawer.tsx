@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 
 interface Message {
   role: 'user' | 'model';
@@ -10,23 +10,20 @@ interface Message {
 interface AuditChatDrawerProps {
   isOpen: boolean;
   onClose: () => void;
+  /** Optional question to auto-send when the drawer opens (e.g. anomaly coach). */
+  seedPrompt?: string | null;
 }
 
-export function AuditChatDrawer({ isOpen, onClose }: AuditChatDrawerProps) {
+export function AuditChatDrawer({ isOpen, onClose, seedPrompt }: AuditChatDrawerProps) {
   const [messages, setMessages] = useState<Message[]>([
     { role: 'model', content: 'Audit telemetry loaded. Challenge my findings, explain an anomaly (like your advance travel bookings), or model a scenario. What are we auditing?' }
   ]);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
+  const [seedConsumed, setSeedConsumed] = useState<string | null>(null);
 
-  if (!isOpen) return null;
-
-  const handleSend = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!input.trim() || loading) return;
-
-    const userMsg = input.trim();
-    setInput('');
+  const sendMessage = async (userMsg: string, historySnapshot: Message[]) => {
+    if (!userMsg.trim() || loading) return;
     setMessages((prev) => [...prev, { role: 'user', content: userMsg }]);
     setLoading(true);
 
@@ -34,7 +31,7 @@ export function AuditChatDrawer({ isOpen, onClose }: AuditChatDrawerProps) {
       const res = await fetch('/api/audit/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ message: userMsg, history: messages })
+        body: JSON.stringify({ message: userMsg, history: historySnapshot })
       });
       const data = await res.json();
       
@@ -45,12 +42,30 @@ export function AuditChatDrawer({ isOpen, onClose }: AuditChatDrawerProps) {
       } else {
         setMessages((prev) => [...prev, { role: 'model', content: 'Error: Engine returned an empty response.' }]);
       }
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('Audit Engine Error:', err);
-      setMessages((prev) => [...prev, { role: 'model', content: `API Error: ${err.message}` }]);
+      const msg = err instanceof Error ? err.message : 'Unknown error';
+      setMessages((prev) => [...prev, { role: 'model', content: `API Error: ${msg}` }]);
     } finally {
       setLoading(false);
     }
+  };
+
+  useEffect(() => {
+    if (!isOpen || !seedPrompt || seedPrompt === seedConsumed || loading) return;
+    setSeedConsumed(seedPrompt);
+    void sendMessage(seedPrompt, messages);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- seed once per prompt string
+  }, [isOpen, seedPrompt, seedConsumed, loading]);
+
+  if (!isOpen) return null;
+
+  const handleSend = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!input.trim() || loading) return;
+    const userMsg = input.trim();
+    setInput('');
+    await sendMessage(userMsg, messages);
   };
 
   return (

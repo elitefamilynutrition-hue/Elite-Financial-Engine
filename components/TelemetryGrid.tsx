@@ -1,11 +1,8 @@
 'use client';
 
-import {
-  resolveCategoryBucketId,
-  bucketLabel,
-  type CategoryBucketId,
-} from '@/lib/analytics/category-buckets';
-import { countsTowardCategoryBurn, resolveIntent } from '@/lib/analytics/intent';
+import { useMemo } from 'react';
+import { aggregateCategoryBurn } from '@/lib/analytics/burn-aggregate';
+import type { CategoryBucketId } from '@/lib/analytics/category-buckets';
 
 interface Account {
   id: string;
@@ -23,21 +20,38 @@ interface Transaction {
   date: string;
   name: string;
   merchant_name?: string | null;
+  account_id?: string | null;
   transaction_intent?: string | null;
   is_internal_transfer?: boolean | null;
   user_intent_override?: string | null;
   exclude_from_burn?: boolean | null;
   override_reason?: string | null;
   pending?: boolean | null;
+  reimbursement_tx_id?: string | null;
 }
 
 interface TelemetryGridProps {
   accounts: Account[];
   transactions: Transaction[];
+  /** Optional server-precomputed burn (preferred). */
+  burnBuckets?: {
+    bucketId: CategoryBucketId;
+    label: string;
+    amount: number;
+    dominantIntent: 'survival' | 'creep';
+    percentage: number;
+  }[];
+  burnTotal?: number;
   onBucketClick?: (bucketId: CategoryBucketId) => void;
 }
 
-export function TelemetryGrid({ accounts, transactions, onBucketClick }: TelemetryGridProps) {
+export function TelemetryGrid({
+  accounts,
+  transactions,
+  burnBuckets,
+  burnTotal,
+  onBucketClick,
+}: TelemetryGridProps) {
   const liquidCapital = accounts
     .filter((a) => (a.account_type || '').toLowerCase() === 'depository')
     .reduce((sum, a) => sum + Number(a.current_balance || 0), 0);
@@ -48,42 +62,19 @@ export function TelemetryGrid({ accounts, transactions, onBucketClick }: Telemet
 
   const netLiquidity = liquidCapital - revolvingDebt;
 
-  const thirtyDaysAgo = new Date();
-  thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+  const liveSet = useMemo(
+    () => new Set(accounts.map((a) => a.plaid_account_id).filter(Boolean) as string[]),
+    [accounts]
+  );
 
-  let operationalBurn = 0;
-  const bucketMap: Record<
-    string,
-    { amount: number; survivalAmt: number; creepAmt: number }
-  > = {};
+  const computed = useMemo(
+    () => aggregateCategoryBurn(transactions, liveSet, 30),
+    [transactions, liveSet]
+  );
 
-  transactions.forEach((t) => {
-    const txDate = new Date(t.date);
-    if (txDate < thirtyDaysAgo) return;
-    if (!countsTowardCategoryBurn(t)) return;
-
-    const amt = Number(t.amount || 0);
-    operationalBurn += amt;
-
-    const bucketId = resolveCategoryBucketId(t.category);
-    if (!bucketMap[bucketId]) {
-      bucketMap[bucketId] = { amount: 0, survivalAmt: 0, creepAmt: 0 };
-    }
-    bucketMap[bucketId].amount += amt;
-    const intent = resolveIntent(t);
-    if (intent === 'creep') bucketMap[bucketId].creepAmt += amt;
-    else bucketMap[bucketId].survivalAmt += amt;
-  });
-
-  const sortedBuckets = Object.entries(bucketMap)
-    .map(([bucketId, data]) => ({
-      bucketId: bucketId as CategoryBucketId,
-      label: bucketLabel(bucketId as CategoryBucketId),
-      amount: data.amount,
-      dominantIntent: data.creepAmt > data.survivalAmt ? 'creep' : 'survival',
-      percentage: operationalBurn > 0 ? (data.amount / operationalBurn) * 100 : 0,
-    }))
-    .sort((a, b) => b.amount - a.amount);
+  const sortedBuckets = burnBuckets && burnBuckets.length > 0 ? burnBuckets : computed.buckets;
+  const operationalBurn =
+    burnTotal != null && burnTotal >= 0 ? burnTotal : computed.operationalBurn;
 
   return (
     <div className="space-y-6">
@@ -114,6 +105,7 @@ export function TelemetryGrid({ accounts, transactions, onBucketClick }: Telemet
           <p className="text-2xl font-bold tracking-tight text-amber-400">
             ${operationalBurn.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
           </p>
+          <p className="text-[10px] text-zinc-500">Credits netted · orphans excluded</p>
         </div>
       </div>
 

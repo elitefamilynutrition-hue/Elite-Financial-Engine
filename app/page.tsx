@@ -10,13 +10,14 @@ import SettingsDrawer from '@/components/SettingsDrawer';
 import { ManualLiabilityCard } from '@/components/ManualLiabilityCard';
 import { AuditChatDrawer } from '@/components/AuditChatDrawer';
 import { CategoryBurnDrawer } from '@/components/CategoryBurnDrawer';
+import { AnomalyReviewPanel, type AnomalyItem } from '@/components/AnomalyReviewPanel';
 import DayZeroIntake from '@/components/DayZeroIntake';
 import { supabase } from '@/lib/supabase';
 import NetWorthTrendChart from '@/components/Dashboard/NetWorthTrendChart'; 
 import CashFlowCreepChart from '@/components/Dashboard/CashFlowCreepChart';
 import WealthMatrixChart from '@/components/Dashboard/WealthMatrixChart';
 import { formatCategoryLabel } from '@/lib/format/category-label';
-import type { CategoryBucketId } from '@/lib/analytics/category-buckets'; 
+import type { CategoryBucketId } from '@/lib/analytics/category-buckets';
 
 function DashboardContent() {
   const searchParams = useSearchParams();
@@ -43,6 +44,15 @@ function DashboardContent() {
   const [isSnapshotting, setIsSnapshotting] = useState(false);
   const [isUpgrading, setIsUpgrading] = useState(false);
   const [burnBucketId, setBurnBucketId] = useState<CategoryBucketId | null>(null);
+  const [burnBuckets, setBurnBuckets] = useState<
+    { bucketId: CategoryBucketId; label: string; amount: number; dominantIntent: 'survival' | 'creep'; percentage: number }[]
+  >([]);
+  const [burnTotal, setBurnTotal] = useState<number | null>(null);
+  const [anomalies, setAnomalies] = useState<AnomalyItem[]>([]);
+  const [sinkingFunds, setSinkingFunds] = useState<
+    { id?: string | number; fund_name?: string; target_amount: number; recurring_schedule?: string; due_date?: string }[]
+  >([]);
+  const [chatSeed, setChatSeed] = useState<string | null>(null);
 
   const handleSignOut = async () => {
     await supabase.auth.signOut();
@@ -122,6 +132,12 @@ function DashboardContent() {
       setAccounts(payload.accounts || []);
       setTransactions(payload.recent_transactions || []);
       if (payload.telemetry) setBaselineTelemetry(payload.telemetry);
+      if (payload.burn?.buckets) setBurnBuckets(payload.burn.buckets);
+      setBurnTotal(
+        typeof payload.burn?.operational_burn === 'number' ? payload.burn.operational_burn : null
+      );
+      setAnomalies(Array.isArray(payload.anomalies) ? payload.anomalies : []);
+      setSinkingFunds(Array.isArray(payload.sinking_funds) ? payload.sinking_funds : []);
     } catch (error) {
       console.error('Failed to fetch dashboard data:', error);
     }
@@ -393,9 +409,19 @@ function DashboardContent() {
               {userId && <NetWorthTrendChart userId={userId} />}
               <CashFlowCreepChart transactions={transactions} />
             </div>
+            <AnomalyReviewPanel
+              anomalies={anomalies}
+              onResolved={fetchDashboardData}
+              onAskAi={(prompt) => {
+                setChatSeed(prompt);
+                setIsChatOpen(true);
+              }}
+            />
             <TelemetryGrid
               accounts={accounts}
               transactions={transactions}
+              burnBuckets={burnBuckets}
+              burnTotal={burnTotal ?? undefined}
               onBucketClick={(bucketId) => setBurnBucketId(bucketId)}
             />
             {userId && <WealthMatrixChart userId={userId} />}
@@ -438,6 +464,26 @@ function DashboardContent() {
                       {' · '}
                       ~${Number(baselineTelemetry.survival_matrix.monthly_baseline_burn || 0).toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}/mo
                     </p>
+                    <div className="flex justify-between text-xs text-zinc-400 pt-1">
+                      <span>Sinking-fund pad:</span>
+                      <span className="text-amber-300 font-mono">
+                        ${Number(baselineTelemetry.survival_matrix.monthly_sinking_pad || 0).toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}/mo
+                        {sinkingFunds.length > 0 ? ` · ${sinkingFunds.length} fund${sinkingFunds.length === 1 ? '' : 's'}` : ''}
+                      </span>
+                    </div>
+                    {sinkingFunds.length > 0 && (
+                      <ul className="mt-2 space-y-1 border-t border-zinc-800 pt-2">
+                        {sinkingFunds.slice(0, 6).map((f, i) => (
+                          <li key={f.id ?? i} className="flex justify-between text-[11px] text-zinc-500">
+                            <span className="truncate pr-2">{f.fund_name || 'Sinking fund'}</span>
+                            <span className="font-mono shrink-0">
+                              ${Number(f.target_amount || 0).toLocaleString('en-US', { maximumFractionDigits: 0 })}
+                              {f.recurring_schedule ? ` · ${f.recurring_schedule}` : ''}
+                            </span>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
                     
                     <div className="space-y-1 mt-2">
                       <div className="flex justify-between text-xs text-zinc-400 mb-1.5">
@@ -563,7 +609,13 @@ function DashboardContent() {
           <CapitalSimulator
             initialLiquid={liquidCapital}
             initialDebt={revolvingDebt}
-            monthlyBurn={trailingBurn > 0 ? trailingBurn : 392.08}
+            monthlyBurn={
+              burnTotal != null && burnTotal > 0
+                ? burnTotal
+                : trailingBurn > 0
+                  ? trailingBurn
+                  : 392.08
+            }
             emergencyMonths={6}
             annualGrowthRate={0.08}
             targetYears={20}
@@ -591,7 +643,11 @@ function DashboardContent() {
 
       <AuditChatDrawer 
         isOpen={isChatOpen} 
-        onClose={() => setIsChatOpen(false)} 
+        onClose={() => {
+          setIsChatOpen(false);
+          setChatSeed(null);
+        }}
+        seedPrompt={chatSeed}
       />
 
       {burnBucketId && (

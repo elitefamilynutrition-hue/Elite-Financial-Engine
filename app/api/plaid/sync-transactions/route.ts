@@ -295,12 +295,64 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // Orphan hygiene: delete txs whose account_id is NOT in the user's live
+    // financial_accounts (ghost rows after Plaid re-link). Never deletes live-account rows.
+    let orphansDeleted = 0;
+    try {
+      const { data: liveAccounts } = await supabase
+        .from('financial_accounts')
+        .select('plaid_account_id')
+        .eq('user_id', user.id);
+
+      const liveIds = (liveAccounts || [])
+        .map((a) => a.plaid_account_id)
+        .filter(Boolean) as string[];
+
+      if (liveIds.length > 0) {
+        const liveSet = new Set(liveIds);
+        // Sample recent account_ids; filter orphans in JS (avoids fragile PostgREST `in` encoding).
+        const { data: accountIdSample } = await supabase
+          .from('transactions')
+          .select('account_id')
+          .eq('user_id', user.id)
+          .limit(2000);
+
+        const orphanAccountIds = [
+          ...new Set(
+            (accountIdSample || [])
+              .map((r) => r.account_id)
+              .filter((id): id is string => typeof id === 'string' && id.length > 0 && !liveSet.has(id))
+          ),
+        ];
+
+        for (const orphanAccountId of orphanAccountIds) {
+          const { data: deleted, error: orphanErr } = await supabase
+            .from('transactions')
+            .delete()
+            .eq('user_id', user.id)
+            .eq('account_id', orphanAccountId)
+            .select('id');
+          if (orphanErr) {
+            console.warn('[Plaid Sync] Orphan cleanup error:', orphanErr.message);
+            continue;
+          }
+          orphansDeleted += deleted?.length || 0;
+        }
+      }
+    } catch (orphanCleanupErr: unknown) {
+      console.warn(
+        '[Plaid Sync] Orphan account cleanup skipped:',
+        orphanCleanupErr instanceof Error ? orphanCleanupErr.message : orphanCleanupErr
+      );
+    }
+
     return NextResponse.json({
       status: 'SUCCESS',
       added: totalAdded,
       modified: totalModified,
       removed: totalRemoved,
       investments_added: totalInvestmentsAdded,
+      orphans_deleted: orphansDeleted,
       sync_errors: errors.length > 0 ? errors : undefined
     });
   } catch (error: any) {

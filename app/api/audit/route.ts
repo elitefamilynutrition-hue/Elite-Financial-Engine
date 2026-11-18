@@ -74,6 +74,12 @@ export async function POST() {
       .limit(1)
       .single();
 
+    const { data: sinkingFunds } = await supabase
+      .from('sinking_funds')
+      .select('fund_name, target_amount, recurring_schedule, due_date')
+      .eq('user_id', user.id)
+      .order('due_date', { ascending: true });
+
     // 3. Pre-Aggregate Live Telemetry
     const liquidCapital = accounts
       .filter((a) => a.account_type.toLowerCase() === 'depository')
@@ -204,6 +210,9 @@ ${JSON.stringify(categoryBreakdown, null, 2)}
 HISTORICAL SNAPSHOTS & BASELINE (from historical_snapshots — liquid/investment capital, total_liabilities, survival_floor, monthly_burn_rate, wealth quotas):
 - Baseline: ${JSON.stringify(baseline || 'None')}
 - Snapshots (newest first): ${JSON.stringify(historicalSnapshots || [])}
+
+SINKING FUNDS (expected annual/semi-annual landmines — treat matching spikes as planned, not lifestyle creep):
+${JSON.stringify(sinkingFunds || [], null, 2)}
 
 Generate a structured forensic audit report following the Work-Backwards Order of Operations with these section headers:
 

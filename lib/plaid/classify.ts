@@ -1,5 +1,6 @@
 import type { Transaction } from 'plaid';
 import { resolveIntent, type TransactionIntent } from '@/lib/analytics/intent';
+import { isInsuranceMerchant } from '@/lib/analytics/merchants';
 
 /**
  * Turns a Plaid transaction into the app's own intent vocabulary.
@@ -46,6 +47,7 @@ const SURVIVAL_DETAILED = new Set([
   'MEDICAL_PRIMARY_CARE',
   'MEDICAL_PHARMACIES_AND_SUPPLEMENTS',
   'INSURANCE_INSURANCE',
+  'GENERAL_SERVICES_INSURANCE',
 ]);
 
 const SURVIVAL_PRIMARY = new Set([
@@ -104,6 +106,11 @@ export function classifyPlaidTransaction(tx: Transaction): ClassifiedTransaction
         nameBlob.includes('capital one')))
   ) {
     return { is_internal_transfer: true, transaction_intent: 'transfer' };
+  }
+
+  // Insurers (Root, Geico, …) are survival essentials even if Plaid says TRAVEL/GENERAL_SERVICES.
+  if (isInsuranceMerchant(tx.name, tx.merchant_name) || detailed.includes('INSURANCE')) {
+    return { is_internal_transfer: false, transaction_intent: 'survival' };
   }
 
   if (detailed && OFFENSE_PREFIXES.some((prefix) => detailed.startsWith(prefix))) {

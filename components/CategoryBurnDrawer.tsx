@@ -7,7 +7,18 @@ import {
   categoryMatchesBucket,
   type CategoryBucketId,
 } from '@/lib/analytics/category-buckets';
+import { isInsuranceMerchant } from '@/lib/analytics/merchants';
 import { resolveIntent, type OverrideReason, type TransactionIntent } from '@/lib/analytics/intent';
+
+function matchesBurnBucket(
+  tx: { category?: string | null; name?: string | null; merchant_name?: string | null },
+  bucketId: CategoryBucketId
+): boolean {
+  if (isInsuranceMerchant(tx.name, tx.merchant_name) || (tx.category || '').toUpperCase().includes('INSURANCE')) {
+    return bucketId === 'essentials';
+  }
+  return categoryMatchesBucket(tx.category, bucketId);
+}
 
 export interface BurnDrawerTransaction {
   id: string;
@@ -53,7 +64,7 @@ export function CategoryBurnDrawer({
   const rows = useMemo(() => {
     return transactions
       .filter((tx) => {
-        if (!categoryMatchesBucket(tx.category, bucketId)) return false;
+        if (!matchesBurnBucket(tx, bucketId)) return false;
         const amt = Number(tx.amount || 0);
         if (amt <= 0) return false;
         const txDate = new Date(tx.date);

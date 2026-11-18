@@ -43,6 +43,7 @@ const ESSENTIALS_DETAILED = new Set([
   'MEDICAL_EYE_CARE',
   'MEDICAL_VETERINARY_SERVICES',
   'INSURANCE_INSURANCE',
+  'GENERAL_SERVICES_INSURANCE',
 ]);
 
 const ESSENTIALS_PRIMARY = new Set(['MEDICAL', 'INSURANCE']);
@@ -56,6 +57,8 @@ export function pfcPrimaryFromCategory(raw: string | null | undefined): string {
   const code = normalizeRaw(raw);
   if (!code) return '';
 
+  // Longer / more specific primaries first so GENERAL_SERVICES_INSURANCE
+  // does not collapse to GENERAL_SERVICES before INSURANCE is considered.
   const knownPrimaries = [
     'INCOME',
     'TRANSFER_IN',
@@ -65,7 +68,6 @@ export function pfcPrimaryFromCategory(raw: string | null | undefined): string {
     'ENTERTAINMENT',
     'FOOD_AND_DRINK',
     'GENERAL_MERCHANDISE',
-    'GENERAL_SERVICES',
     'GOVERNMENT_AND_NON_PROFIT',
     'HOME_IMPROVEMENT',
     'MEDICAL',
@@ -74,6 +76,7 @@ export function pfcPrimaryFromCategory(raw: string | null | undefined): string {
     'TRANSPORTATION',
     'TRAVEL',
     'INSURANCE',
+    'GENERAL_SERVICES',
   ];
 
   for (const primary of knownPrimaries) {
@@ -88,6 +91,7 @@ export function resolveCategoryBucketId(raw: string | null | undefined): Categor
   if (!code) return 'other';
 
   if (ESSENTIALS_DETAILED.has(code)) return 'essentials';
+  if (code.includes('INSURANCE')) return 'essentials';
 
   const primary = pfcPrimaryFromCategory(code);
 

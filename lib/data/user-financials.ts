@@ -45,7 +45,6 @@ export interface TransactionRow {
   user_intent_override?: string | null;
   exclude_from_burn?: boolean | null;
   override_reason?: string | null;
-  pending?: boolean | null;
   reimbursement_tx_id?: string | null;
 }
 

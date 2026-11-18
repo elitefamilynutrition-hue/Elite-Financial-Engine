@@ -223,6 +223,34 @@ Fix app metadata away from "Create Next App".
 - Sync/webhook pending→posted hygiene via `pending_transaction_id`; CC payments stay transfers
 - Ledger uses humanized category labels
 
+### Shipped — Catch-up: burn integrity + sinking funds + anomaly coach v1
+**Shipped in this pass**
+- Dashboard `/api/telemetry/dashboard` scopes `recent_transactions` to live `financial_accounts.plaid_account_id` only (orphans never feed burn/ledger)
+- Sync deletes orphan txs (`account_id` not in live accounts) for the session user; returns `orphans_deleted`
+- Insurance remap: `GENERAL_SERVICES_INSURANCE` / `INSURANCE_*` + merchant hints (Root, Geico, …) → essentials + survival
+- Category Burn credit netting (same-merchant + `reimbursement_tx_id`) + cross-account date/amount/name dedupe
+- Survival Floor UI shows monthly sinking pad + fund list; SettingsDrawer already edits sinking funds
+- Audit + audit/chat receive sinking_funds context
+- `AnomalyReviewPanel` (“Review charges”) → override PATCH / Ask AI seed into AuditChatDrawer
+
+**Known data issue**
+- Duplicate/orphan Plaid `account_id`s after re-link inflate burn when querying by `user_id` only — always filter by live accounts; run Sync (or manual orphan DELETE SQL) after re-link.
+
+### Product gaps / coaching layer (upcoming)
+**Done when (track separately)**
+- [x] Orphan transaction hygiene — dashboard/burn live-accounts only; sync cleanup of orphan txs
+- [x] Insurance / `GENERAL_SERVICES_INSURANCE` + merchant hints → essentials + survival
+- [x] Credit↔debit netting for Category Burn (same merchant and/or `reimbursement_tx_id`)
+- [x] Sinking funds visible near Survival Floor + audit/chat context
+- [x] Proactive anomaly coach v1 — large/weird charges → one-off / reimbursed / expected; wire to dispute + chat
+- [ ] Leak / seasonal wave detection (subscriptions + annual premiums) — see Week 4 Day 3
+- [ ] GOD MODE / market analysis — **DEFERRED** (not this product surface)
+
+### DEFERRED — GOD MODE / market analysis (do not build in ECE public product)
+- Live stock/options trading UI, trade execution, or personalized securities advice are **out of scope** for Elite Capital Engine coaching.
+- Education vs advice: any future market tooling must stay educational / operator-lab only, private, compliance-reviewed — never ship as default ECE features or as “advice.”
+- Do not schedule into Week 4 Day briefs until an explicit private/operator-only lab charter exists.
+
 ### Day 1 — Account exclusion (Phase 7.2)
 **Ask**
 How should UGMA/non-operational accounts be excluded from net worth with minimal schema change? Propose field name + filter point in loadUserFinancials. Do not edit.
@@ -337,8 +365,10 @@ Stop. Do not continue into other issues. Finish only the acceptance criteria alr
 | 3 | 4 Sentry/CI | ☐ |
 | 3 | 5 Ledger/env | ☑ |
 | 4 | 0 Category burn UX | ☑ |
+| 4 | Catch-up burn/sinking/anomaly | ☑ |
 | 4 | 1 Exclusions | ☐ |
 | 4 | 2 Profile APIs | ☐ |
-| 4 | 3 Savings/subs | ☐ |
+| 4 | 3 Savings/subs (+ leak/seasonal) | ☐ |
 | 4 | 4 WealthMatrix | ☐ |
 | 4 | 5 Affiliate opt | ☐ |
+| — | GOD MODE / markets | deferred |
