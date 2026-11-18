@@ -5,6 +5,7 @@ import { getServiceSupabase } from '@/lib/supabase-admin';
 import { loadUserFinancials } from '@/lib/data/user-financials';
 import { computeSurvivalFloor } from '@/lib/analytics/survival-floor';
 import { computeWealthQuota } from '@/lib/analytics/wealth-quota';
+import { computeLiveNetWorth } from '@/lib/analytics/net-worth';
 
 /**
  * Sole snapshot writer: stamps today's balance sheet into `historical_snapshots`
@@ -19,23 +20,10 @@ export async function POST() {
     const user = await requireUser();
     const financials = await loadUserFinancials(user.id);
 
-    const liquidCapital = sum(
-      financials.accounts
-        .filter((account) => (account.account_type || '').toLowerCase() === 'depository')
-        .map((account) => account.current_balance)
-    );
-
-    const investmentCapital = sum(
-      financials.accounts
-        .filter((account) => (account.account_type || '').toLowerCase() === 'investment')
-        .map((account) => account.current_balance)
-    );
-
-    const revolvingDebt = sum(
-      financials.accounts
-        .filter((account) => ['credit', 'loan'].includes((account.account_type || '').toLowerCase()))
-        .map((account) => account.current_balance)
-    );
+    const nw = computeLiveNetWorth(financials.accounts);
+    const liquidCapital = nw.liquidCapital;
+    const investmentCapital = nw.investmentCapital;
+    const revolvingDebt = nw.revolvingDebt;
 
     const manualDebt = sum(financials.manualAccounts.map((account) => account.current_balance));
     const totalLiabilities = revolvingDebt + manualDebt;

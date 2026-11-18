@@ -3,6 +3,7 @@
 import { useMemo } from 'react';
 import { aggregateCategoryBurn } from '@/lib/analytics/burn-aggregate';
 import type { CategoryBucketId } from '@/lib/analytics/category-buckets';
+import { computeLiveNetWorth } from '@/lib/analytics/net-worth';
 
 interface Account {
   id: string;
@@ -11,6 +12,7 @@ interface Account {
   account_type: string;
   current_balance: number;
   plaid_account_id?: string;
+  exclude_from_net_worth?: boolean | null;
 }
 
 interface Transaction {
@@ -52,14 +54,7 @@ export function TelemetryGrid({
   burnTotal,
   onBucketClick,
 }: TelemetryGridProps) {
-  const liquidCapital = accounts
-    .filter((a) => (a.account_type || '').toLowerCase() === 'depository')
-    .reduce((sum, a) => sum + Number(a.current_balance || 0), 0);
-
-  const revolvingDebt = accounts
-    .filter((a) => (a.account_type || '').toLowerCase() === 'credit')
-    .reduce((sum, a) => sum + Number(a.current_balance || 0), 0);
-
+  const { liquidCapital, revolvingDebt } = computeLiveNetWorth(accounts);
   const netLiquidity = liquidCapital - revolvingDebt;
 
   const liveSet = useMemo(

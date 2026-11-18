@@ -75,17 +75,18 @@ export function computeSurvivalFloor({
   const windowStart = new Date(now);
   windowStart.setDate(windowStart.getDate() - SURVIVAL_WINDOW_DAYS);
 
-  let oldestInWindow: Date | null = null;
-  let newestInWindow: Date | null = null;
+  let oldestMs: number | null = null;
+  let newestMs: number | null = null;
 
   const survivalSpend = transactions.reduce((total, tx) => {
     if (!isWithinWindow(tx.date, windowStart)) return total;
     if (!isSurvivalSpend(tx)) return total;
 
     const parsed = new Date(tx.date as string);
-    if (!Number.isNaN(parsed.getTime())) {
-      if (!oldestInWindow || parsed < oldestInWindow) oldestInWindow = parsed;
-      if (!newestInWindow || parsed > newestInWindow) newestInWindow = parsed;
+    const ms = parsed.getTime();
+    if (!Number.isNaN(ms)) {
+      if (oldestMs == null || ms < oldestMs) oldestMs = ms;
+      if (newestMs == null || ms > newestMs) newestMs = ms;
     }
 
     return total + Number(tx.amount || 0);
@@ -94,9 +95,8 @@ export function computeSurvivalFloor({
   // Annualize from actual coverage inside the window (not a fixed 90),
   // so sparse history does not look like a "weekly" understatement.
   let coveredDays = SURVIVAL_WINDOW_DAYS;
-  if (oldestInWindow && newestInWindow) {
-    const spanMs = newestInWindow.getTime() - oldestInWindow.getTime();
-    const spanDays = Math.floor(spanMs / (1000 * 60 * 60 * 24)) + 1;
+  if (oldestMs != null && newestMs != null) {
+    const spanDays = Math.floor((newestMs - oldestMs) / (1000 * 60 * 60 * 24)) + 1;
     coveredDays = Math.max(7, Math.min(SURVIVAL_WINDOW_DAYS, spanDays));
   }
 

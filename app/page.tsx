@@ -15,9 +15,12 @@ import DayZeroIntake from '@/components/DayZeroIntake';
 import { supabase } from '@/lib/supabase';
 import NetWorthTrendChart from '@/components/Dashboard/NetWorthTrendChart'; 
 import CashFlowCreepChart from '@/components/Dashboard/CashFlowCreepChart';
-import WealthMatrixChart from '@/components/Dashboard/WealthMatrixChart';
+import WealthMatrixChart, { type FireDashboardPayload } from '@/components/Dashboard/WealthMatrixChart';
+import { SavingsRatioCard, type SavingsRatioPayload } from '@/components/Dashboard/SavingsRatioCard';
+import { SubscriptionAuditCard, type SubscriptionLeakRow } from '@/components/Dashboard/SubscriptionAuditCard';
 import { formatCategoryLabel } from '@/lib/format/category-label';
 import type { CategoryBucketId } from '@/lib/analytics/category-buckets';
+import { computeLiveNetWorth } from '@/lib/analytics/net-worth';
 
 function DashboardContent() {
   const searchParams = useSearchParams();
@@ -53,6 +56,10 @@ function DashboardContent() {
     { id?: string | number; fund_name?: string; target_amount: number; recurring_schedule?: string; due_date?: string }[]
   >([]);
   const [chatSeed, setChatSeed] = useState<string | null>(null);
+  const [savingsRatio, setSavingsRatio] = useState<SavingsRatioPayload | null>(null);
+  const [subscriptionLeaks, setSubscriptionLeaks] = useState<SubscriptionLeakRow[]>([]);
+  const [firePayload, setFirePayload] = useState<FireDashboardPayload | null>(null);
+  const [excludeBusyId, setExcludeBusyId] = useState<string | null>(null);
 
   const handleSignOut = async () => {
     await supabase.auth.signOut();
@@ -138,6 +145,9 @@ function DashboardContent() {
       );
       setAnomalies(Array.isArray(payload.anomalies) ? payload.anomalies : []);
       setSinkingFunds(Array.isArray(payload.sinking_funds) ? payload.sinking_funds : []);
+      setSavingsRatio(payload.savings_ratio || null);
+      setSubscriptionLeaks(Array.isArray(payload.subscription_leaks) ? payload.subscription_leaks : []);
+      setFirePayload(payload.fire || null);
     } catch (error) {
       console.error('Failed to fetch dashboard data:', error);
     }
@@ -215,15 +225,34 @@ function DashboardContent() {
     }
   };
 
-  // Balance Sheet Engine: Categorization & Aggregation
+  // Balance Sheet lists all linked accounts; NW totals omit exclude_from_net_worth.
   const depositoryAccounts = accounts.filter(a => (a.account_type || '').toLowerCase() === 'depository');
   const investmentAccounts = accounts.filter(a => (a.account_type || '').toLowerCase() === 'investment' || (a.account_type || '').toLowerCase() === 'brokerage');
   const liabilityAccounts = accounts.filter(a => (a.account_type || '').toLowerCase() === 'credit' || (a.account_type || '').toLowerCase() === 'loan');
 
-  const liquidCapital = depositoryAccounts.reduce((sum, a) => sum + Number(a.current_balance || 0), 0);
-  const investmentCapital = investmentAccounts.reduce((sum, a) => sum + Number(a.current_balance || 0), 0);
-  const revolvingDebt = liabilityAccounts.reduce((sum, a) => sum + Number(a.current_balance || 0), 0);
-  const totalNetWorth = liquidCapital + investmentCapital - revolvingDebt;
+  const { liquidCapital, investmentCapital, revolvingDebt, netWorth: totalNetWorth } =
+    computeLiveNetWorth(accounts);
+
+  const toggleAccountExclusion = async (accountId: string, next: boolean) => {
+    setExcludeBusyId(accountId);
+    try {
+      const res = await fetch(`/api/accounts/${accountId}/exclude`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ exclude_from_net_worth: next }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || 'Failed to update exclusion');
+      setAccounts((prev) =>
+        prev.map((a) => (a.id === accountId ? { ...a, exclude_from_net_worth: next } : a))
+      );
+      await fetchDashboardData();
+    } catch (err: unknown) {
+      alert(err instanceof Error ? err.message : 'Failed to update account exclusion');
+    } finally {
+      setExcludeBusyId(null);
+    }
+  };
 
   const thirtyDaysAgo = new Date();
   thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
@@ -251,9 +280,21 @@ function DashboardContent() {
     .reduce((sum, t) => sum + Number(t.amount), 0);
 
   const renderCard = (acc: any, colorClass: string) => (
-    <div key={acc.id} className="bg-zinc-900 border border-zinc-800 rounded-xl p-5 space-y-2 shadow-sm">
-      <div className={`text-xs font-mono uppercase tracking-wider ${colorClass}`}>
-        {acc.account_subtype || acc.account_type}
+    <div key={acc.id} className={`bg-zinc-900 border rounded-xl p-5 space-y-2 shadow-sm ${acc.exclude_from_net_worth ? 'border-amber-500/30 opacity-80' : 'border-zinc-800'}`}>
+      <div className="flex justify-between items-start gap-2">
+        <div className={`text-xs font-mono uppercase tracking-wider ${colorClass}`}>
+          {acc.account_subtype || acc.account_type}
+        </div>
+        <label className="flex items-center gap-1.5 text-[10px] text-zinc-500 cursor-pointer shrink-0">
+          <input
+            type="checkbox"
+            checked={Boolean(acc.exclude_from_net_worth)}
+            disabled={excludeBusyId === acc.id}
+            onChange={(e) => toggleAccountExclusion(acc.id, e.target.checked)}
+            className="rounded border-zinc-600 bg-zinc-950"
+          />
+          Exclude from NW
+        </label>
       </div>
       {editingId === acc.id ? (
         <input
@@ -276,6 +317,9 @@ function DashboardContent() {
       <div className="text-2xl font-bold tracking-tight">
         ${Number(acc.current_balance).toLocaleString('en-US', { minimumFractionDigits: 2 })}
       </div>
+      {acc.exclude_from_net_worth ? (
+        <p className="text-[10px] text-amber-500">Omitted from net worth aggregates</p>
+      ) : null}
     </div>
   );
 
@@ -424,7 +468,11 @@ function DashboardContent() {
               burnTotal={burnTotal ?? undefined}
               onBucketClick={(bucketId) => setBurnBucketId(bucketId)}
             />
-            {userId && <WealthMatrixChart userId={userId} />}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <SavingsRatioCard data={savingsRatio} />
+              <SubscriptionAuditCard leaks={subscriptionLeaks} />
+            </div>
+            <WealthMatrixChart fire={firePayload} />
             
             <section className="bg-zinc-900 border border-zinc-800 rounded-xl p-6 space-y-6">
               <h2 className="text-lg font-semibold tracking-tight">Baseline Freeze & Wealth Matrix</h2>

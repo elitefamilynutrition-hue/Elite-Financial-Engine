@@ -6,6 +6,9 @@ import { loadUserFinancials } from '@/lib/data/user-financials';
 import { computeSurvivalFloor } from '@/lib/analytics/survival-floor';
 import { computeWealthQuota } from '@/lib/analytics/wealth-quota';
 import { aggregateCategoryBurn, detectAnomalies } from '@/lib/analytics/burn-aggregate';
+import { computeSavingsRatio, detectSubscriptionLeaks } from '@/lib/analytics/savings-leak';
+import { computeLiveNetWorth } from '@/lib/analytics/net-worth';
+import { computeFireProjection } from '@/lib/analytics/fire-projection';
 
 const RECENT_TX_DAYS = 90;
 const RECENT_TX_LIMIT = 500;
@@ -61,6 +64,26 @@ export async function GET() {
 
     const burn = aggregateCategoryBurn(recentTx as never, liveSet, 30);
     const anomalies = detectAnomalies(recentTx as never, liveSet);
+    const savings = computeSavingsRatio(recentTx as never, 30);
+    const leaks = detectSubscriptionLeaks(recentTx as never, 120);
+    const nw = computeLiveNetWorth(financials.accounts);
+
+    const annualContribution =
+      savings.monthly_savings > 0
+        ? savings.monthly_savings * 12
+        : Math.max(0, quota.remaining_monthly) * 12;
+
+    const fire = computeFireProjection({
+      currentNetWorth: nw.netWorth,
+      investedCapital: nw.investmentCapital,
+      monthlyBurn: survival.monthly_burn_rate,
+      safeWithdrawalRatePct: Number(financials.profile?.safe_withdrawal_rate || 4),
+      inflationPct: Number(financials.profile?.expected_inflation_rate || 3),
+      currentAge: Number(financials.profile?.current_age || 35),
+      targetRetirementAge: Number(financials.profile?.target_retirement_age || 55),
+      annualContribution,
+      useRealReturns: false,
+    });
 
     const sinkingSummary = (financials.sinkingFunds || []).map((f, idx) => ({
       id: idx,
@@ -68,7 +91,6 @@ export async function GET() {
       recurring_schedule: f.recurring_schedule || 'Annual',
     }));
 
-    // Enrich sinking summary with names when available from a second query.
     const { data: sinkingNamed } = await supabase
       .from('sinking_funds')
       .select('id, fund_name, target_amount, recurring_schedule, due_date')
@@ -87,6 +109,29 @@ export async function GET() {
       },
       anomalies,
       sinking_funds: sinkingNamed || sinkingSummary,
+      savings_ratio: savings,
+      subscription_leaks: leaks,
+      fire: {
+        fire_target: fire.fireTarget,
+        fire_multiplier: fire.fireMultiplier,
+        annual_burn: fire.annualBurn,
+        progress_pct: fire.progressPct,
+        is_on_pace: fire.isOnPace,
+        pace_reason: fire.paceReason,
+        series: fire.series,
+        effective_return_pct: fire.effectiveReturnPct,
+        real_return_pct: fire.realReturnPct,
+        nominal_return_pct: fire.nominalReturnPct,
+        terminal_projected: fire.terminalProjected,
+        swr_pct: Number(financials.profile?.safe_withdrawal_rate || 4),
+        inflation_pct: Number(financials.profile?.expected_inflation_rate || 3),
+        annual_contribution: annualContribution,
+        current_age: Number(financials.profile?.current_age || 35),
+        target_retirement_age: Number(financials.profile?.target_retirement_age || 55),
+        current_nw: nw.netWorth,
+        invested_capital: nw.investmentCapital,
+      },
+      net_worth: nw,
       telemetry: {
         wealth_quota: {
           gross_target: quota.target_annual,

@@ -173,67 +173,49 @@ export default function DayZeroIntake({ onComplete }: { onComplete: () => void }
       const grossSalary = formData.base_salary ? parseFloat(formData.base_salary as string) : 0;
       const bonusTarget = formData.annual_bonus_target ? parseFloat(formData.annual_bonus_target as string) : 0;
 
-      // 1. Upsert the Core Profile with explicit onConflict: 'user_id'
-      const { error: profileError } = await supabase
-        .from('user_financial_profiles')
-        .upsert(
-          {
-            user_id: session.user.id,
-            current_age: formData.age ? parseInt(formData.age as string) : null,
-            target_retirement_age: formData.target_retirement_age ? parseInt(formData.target_retirement_age as string) : null,
-            annual_gross_salary: grossSalary,
-            annual_bonus_target: bonusTarget,
-            marginal_tax_bracket: estimatedMarginalBracket,
-            target_emergency_months: formData.target_emergency_months,
-            expected_inflation_rate: parseFloat(formData.expected_inflation_rate) || 3.0,
-            safe_withdrawal_rate: parseFloat(formData.safe_withdrawal_rate) || 4.0,
-            relationship_status: formData.relationship_status,
-            dependents_count: formData.dependents_count || 0,
-            employment_type: formData.employment_type,
-            housing_status: formData.housing_status,
-            state_of_residence: formData.state_of_residence,
-            health_plan_type: formData.health_plan_type,
-            traditional_ira_balance: parseFloat(formData.traditional_ira_balance as string) || 0,
-            term_life_coverage: formData.term_life_coverage ? parseFloat(formData.term_life_coverage as string) : 0,
-            living_trust_established: formData.living_trust_established,
-            business_entity_type: formData.business_entity_type,
-            variable_compensation_flag: formData.variable_compensation_flag,
-            rsu_vesting_flag: formData.rsu_vesting_flag,
-            mega_backdoor_eligible: formData.mega_backdoor_eligible,
-            real_estate_tax_loophole_flag: formData.real_estate_tax_loophole_flag,
-            nqdc_participation_flag: formData.nqdc_participation_flag,
-            child_investment_accounts: formData.child_investment_accounts,
-            financial_kryptonite: formData.financial_kryptonite,
-          },
-          { onConflict: 'user_id' }
-        );
-
-      if (profileError) throw profileError;
-
-      // 2. Insert Event Horizon if provided
-      if (formData.event_name && formData.event_target_amount) {
-        const { error: eventError } = await supabase.from('future_liquidity_events').insert({
-          user_id: session.user.id,
-          event_name: formData.event_name,
-          target_date: formData.event_target_date || new Date().toISOString(),
-          target_amount: parseFloat(formData.event_target_amount as string),
-        });
-        if (eventError) throw eventError;
-      }
-
-      // 3. Insert Sinking Funds
       const validFunds = formData.sinking_funds.filter(f => f.fund_name && f.target_amount && f.due_date);
-      if (validFunds.length > 0) {
-        const mappedFunds = validFunds.map(f => ({
-          user_id: session.user.id,
-          fund_name: f.fund_name,
-          target_amount: parseFloat(f.target_amount),
-          due_date: f.due_date,
-          recurring_schedule: f.recurring_schedule,
-        }));
-        const { error: fundsError } = await supabase.from('sinking_funds').insert(mappedFunds);
-        if (fundsError) throw fundsError;
-      }
+      const res = await fetch('/api/profile/setup', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          current_age: formData.age ? parseInt(formData.age as string) : null,
+          target_retirement_age: formData.target_retirement_age ? parseInt(formData.target_retirement_age as string) : null,
+          annual_gross_salary: grossSalary,
+          annual_bonus_target: bonusTarget,
+          marginal_tax_bracket: estimatedMarginalBracket,
+          target_emergency_months: formData.target_emergency_months,
+          expected_inflation_rate: parseFloat(formData.expected_inflation_rate) || 3.0,
+          safe_withdrawal_rate: parseFloat(formData.safe_withdrawal_rate) || 4.0,
+          relationship_status: formData.relationship_status,
+          dependents_count: formData.dependents_count || 0,
+          employment_type: formData.employment_type,
+          housing_status: formData.housing_status,
+          state_of_residence: formData.state_of_residence,
+          health_plan_type: formData.health_plan_type,
+          traditional_ira_balance: parseFloat(formData.traditional_ira_balance as string) || 0,
+          term_life_coverage: formData.term_life_coverage ? parseFloat(formData.term_life_coverage as string) : 0,
+          living_trust_established: formData.living_trust_established,
+          business_entity_type: formData.business_entity_type,
+          variable_compensation_flag: formData.variable_compensation_flag,
+          rsu_vesting_flag: formData.rsu_vesting_flag,
+          mega_backdoor_eligible: formData.mega_backdoor_eligible,
+          real_estate_tax_loophole_flag: formData.real_estate_tax_loophole_flag,
+          nqdc_participation_flag: formData.nqdc_participation_flag,
+          child_investment_accounts: formData.child_investment_accounts,
+          financial_kryptonite: formData.financial_kryptonite,
+          event_name: formData.event_name || undefined,
+          event_target_date: formData.event_target_date || undefined,
+          event_target_amount: formData.event_target_amount || undefined,
+          sinking_funds: validFunds.map((f) => ({
+            fund_name: f.fund_name,
+            target_amount: parseFloat(f.target_amount),
+            due_date: f.due_date,
+            recurring_schedule: f.recurring_schedule,
+          })),
+        }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || 'Day Zero setup failed');
 
       onComplete();
     } catch (error: any) {

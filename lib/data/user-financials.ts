@@ -17,6 +17,7 @@ export interface FinancialAccount {
   current_balance: number | string | null;
   available_balance: number | string | null;
   currency_code: string | null;
+  exclude_from_net_worth?: boolean | null;
 }
 
 export interface ManualAccount {

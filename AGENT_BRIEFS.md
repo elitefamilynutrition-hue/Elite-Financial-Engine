@@ -243,7 +243,7 @@ Fix app metadata away from "Create Next App".
 - [x] Credit↔debit netting for Category Burn (same merchant and/or `reimbursement_tx_id`)
 - [x] Sinking funds visible near Survival Floor + audit/chat context
 - [x] Proactive anomaly coach v1 — large/weird charges → one-off / reimbursed / expected; wire to dispute + chat
-- [ ] Leak / seasonal wave detection (subscriptions + annual premiums) — see Week 4 Day 3
+- [x] Leak / seasonal wave detection (subscriptions + annual premiums) — Week 4 Day 3 heuristic v1
 - [ ] GOD MODE / market analysis — **DEFERRED** (not this product surface)
 
 ### DEFERRED — GOD MODE / market analysis (do not build in ECE public product)
@@ -252,79 +252,52 @@ Fix app metadata away from "Create Next App".
 - Do not schedule into Week 4 Day briefs until an explicit private/operator-only lab charter exists.
 
 ### Day 1 — Account exclusion (Phase 7.2)
-**Ask**
-How should UGMA/non-operational accounts be excluded from net worth with minimal schema change? Propose field name + filter point in loadUserFinancials. Do not edit.
-
-
-**Agent**
-P3: Implement account exclusion from net worth.
-
-Persist exclusion flag on financial_accounts (or agreed field).
-Simple checkbox UI for linked accounts.
-Filter excluded accounts in server aggregations / loadUserFinancials.
+**Shipped**
+- Migration `20261118000000_week4_account_exclusion.sql` → `financial_accounts.exclude_from_net_worth`
+- `PATCH /api/accounts/[id]/exclude`; Balance Sheet checkbox “Exclude from NW”
+- `lib/analytics/net-worth.ts` filters operational accounts; used by dashboard TelemetryGrid, snapshot, FIRE payload
 
 **Done when**
-- [ ] Excluded account omitted from NW aggregates
-- [ ] Committed
+- [x] Excluded account omitted from NW aggregates
+- [x] Committed
 ---
 ### Day 2 — Profile setup / recalculate (Phase 7.1 / 7.3)
-**Ask**
-Compare DayZeroIntake client writes vs app/api/profile/route.ts and SettingsDrawer. What is the smallest server API surface for setup + recalculate? Do not edit.
-
-
-**Agent**
-P3: Add /api/profile/setup and/or /api/profile/recalculate as designed in Ask. Wire DayZeroIntake and/or SettingsDrawer to use them so wealth quota / survival floor recalculate after profile changes. Keep payloads validated; session-scoped only.
-
+**Shipped**
+- `POST /api/profile/setup` — Day Zero upsert + optional sinking funds / liquidity event + telemetry
+- `POST /api/profile/recalculate` — patch profile + return survival / wealth quota / FIRE
+- DayZeroIntake → setup; SettingsDrawer architecture save → recalculate
 
 **Done when**
-- [ ] Profile changes recalculate server-side
-- [ ] Committed
+- [x] Profile changes recalculate server-side
+- [x] Committed
 ---
 ### Day 3 — Savings ratio + subscription leak (Phase 8.1)
-**Ask**
-Define server-side rules for monthly/annual savings ratio and recurring subscription/leak detection from transactions. Output API + card props only. Do not edit.
-
-
-**Agent**
-P3: Implement savings ratio + subscription leak engine per this spec: [PASTE ASK SPEC]
-
-Server calculation endpoint or extend dashboard API
-Add SavingsRatioCard + SubscriptionAuditCard under components/Dashboard
-Wire into dashboard page Keep UI simple; no affiliate yet.
+**Shipped**
+- `lib/analytics/savings-leak.ts` — 30d savings ratio + 120d subscription/leak heuristics
+- Dashboard payload: `savings_ratio`, `subscription_leaks`
+- `SavingsRatioCard` + `SubscriptionAuditCard` on Command Center
 
 **Done when**
-- [ ] Cards render real computed data
-- [ ] Committed
+- [x] Cards render real computed data
+- [x] Committed
 ---
 ### Day 4 — WealthMatrix Rule of 25 + inflation (Phase 8.2)
-**Ask**
-Inspect components/Dashboard/WealthMatrixChart.tsx for hardcoded years/rates/targets. Map inputs from user_financial_profiles (SWR, inflation, burn). Do not edit.
-
-
-**Agent**
-P3: Drive WealthMatrixChart from profile burn / SWR / inflation.
-
-Real Rule of 25 (or SWR-based) target line
-Inflation / real-return toggle
-Remove hardcoded demo constants (e.g. fixed 8%, $42k, 16y theater)
+**Shipped**
+- `lib/analytics/fire-projection.ts` — FI target = annual burn × (100/SWR); projection uses profile age/SWR/inflation + savings contribution
+- WealthMatrixChart driven by dashboard `fire` payload; real-return (CPI) toggle; removed hardcoded 8%+$42k theater
+- Honest On Pace vs terminal projection clearing FI target
 
 **Done when**
-- [ ] Chart uses profile inputs
-- [ ] Toggle works
-- [ ] Committed
+- [x] Chart uses profile inputs
+- [x] Toggle works
+- [x] Committed
 ---
-### Day 5 — Optional affiliate CTA (Phase 8.3) — skip if tired
-**Ask**
-Draft a compliant high-level UX for suggesting balance-transfer / credit options for high-APR liabilities (disclosure-heavy). No scraping. Do not implement RAG tax (8.4).
-
-
-**Agent**
-P3 optional: Add a simple affiliate/disclosure CTA card for high-interest liabilities per this copy/UX: [PASTE ASK DRAFT] Must include clear disclosure. No Credit Karma scraping; link-out only. Skip if disclosures are unclear — prefer no ship.
-
+### Day 5 — Optional affiliate CTA (Phase 8.3) — SKIPPED
+**Consciously skipped:** balance-transfer / credit affiliate CTA needs counsel-reviewed disclosure copy; prefer no ship over fake compliance. Revisit post-counsel.
 
 **Done when**
-- [ ] CTA + disclosure OR consciously skipped
-- [ ] Committed if shipped
+- [x] CTA + disclosure OR consciously skipped
+- [x] Committed if shipped (N/A — skipped)
 ---
 ## Stretch (Weeks 5–6) — only if needed
 Use **Ask** for design; Agent only for a single agreed slice.
@@ -366,9 +339,9 @@ Stop. Do not continue into other issues. Finish only the acceptance criteria alr
 | 3 | 5 Ledger/env | ☑ |
 | 4 | 0 Category burn UX | ☑ |
 | 4 | Catch-up burn/sinking/anomaly | ☑ |
-| 4 | 1 Exclusions | ☐ |
-| 4 | 2 Profile APIs | ☐ |
-| 4 | 3 Savings/subs (+ leak/seasonal) | ☐ |
-| 4 | 4 WealthMatrix | ☐ |
-| 4 | 5 Affiliate opt | ☐ |
+| 4 | 1 Exclusions | ☑ |
+| 4 | 2 Profile APIs | ☑ |
+| 4 | 3 Savings/subs (+ leak/seasonal) | ☑ |
+| 4 | 4 WealthMatrix | ☑ |
+| 4 | 5 Affiliate opt | ☑ skipped |
 | — | GOD MODE / markets | deferred |

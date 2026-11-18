@@ -1,179 +1,107 @@
 'use client';
 
-import React, { useEffect, useState } from 'react';
-import { ResponsiveContainer, AreaChart, Area, XAxis, YAxis, Tooltip } from 'recharts';
-import { supabase } from '@/lib/supabase';
+import React, { useMemo, useState } from 'react';
+import { ResponsiveContainer, AreaChart, Area, XAxis, YAxis, Tooltip, ReferenceLine } from 'recharts';
+import { computeFireProjection } from '@/lib/analytics/fire-projection';
 
-type SnapshotRow = {
-  snapshot_date: string;
-  liquid_capital: number | string | null;
-  investment_capital: number | string | null;
-  total_liabilities: number | string | null;
-};
+export interface FireDashboardPayload {
+  fire_target: number;
+  fire_multiplier: number;
+  annual_burn: number;
+  progress_pct: number;
+  is_on_pace: boolean;
+  pace_reason: string;
+  series: { year: number; age: number; projected: number; fireTarget: number }[];
+  effective_return_pct: number;
+  real_return_pct: number;
+  nominal_return_pct: number;
+  terminal_projected: number;
+  swr_pct: number;
+  inflation_pct: number;
+  annual_contribution: number;
+  current_age: number;
+  target_retirement_age: number;
+  current_nw: number;
+  invested_capital: number;
+}
 
-type AccountRow = {
-  account_type: string | null;
-  current_balance: number | string | null;
-};
+export default function WealthMatrixChart({ fire }: { fire: FireDashboardPayload | null }) {
+  const [useReal, setUseReal] = useState(false);
 
-export default function WealthMatrixChart({ userId }: { userId: string }) {
-  const [data, setData] = useState<{ year: number; Target: number; Actual: number | null }[]>([]);
-  const [metrics, setMetrics] = useState({ currentNW: 0, targetNW: 0, ror: 0, isOnPace: true });
-  const [loading, setLoading] = useState(true);
-  const [emptyReason, setEmptyReason] = useState<string | null>(null);
+  const recomputed = useMemo(() => {
+    if (!fire) return null;
+    return computeFireProjection({
+      currentNetWorth: fire.current_nw,
+      investedCapital: fire.invested_capital,
+      monthlyBurn: fire.annual_burn / 12,
+      safeWithdrawalRatePct: fire.swr_pct,
+      inflationPct: fire.inflation_pct,
+      nominalReturnPct: fire.nominal_return_pct,
+      currentAge: fire.current_age,
+      targetRetirementAge: fire.target_retirement_age,
+      annualContribution: fire.annual_contribution,
+      useRealReturns: useReal,
+    });
+  }, [fire, useReal]);
 
-  useEffect(() => {
-    async function fetchWealthData() {
-      setLoading(true);
-      setEmptyReason(null);
-
-      const [{ data: snapshots }, { data: accounts }, { data: profile }] = await Promise.all([
-        supabase
-          .from('historical_snapshots')
-          .select('snapshot_date, liquid_capital, investment_capital, total_liabilities')
-          .eq('user_id', userId)
-          .order('snapshot_date', { ascending: true })
-          .limit(30),
-        supabase
-          .from('financial_accounts')
-          .select('account_type, current_balance')
-          .eq('user_id', userId),
-        supabase
-          .from('user_financial_profiles')
-          .select('current_age, target_retirement_age')
-          .eq('user_id', userId)
-          .maybeSingle(),
-      ]);
-
-      const liveLiquid = (accounts || [])
-        .filter((a: AccountRow) => (a.account_type || '').toLowerCase() === 'depository')
-        .reduce((sum: number, a: AccountRow) => sum + Number(a.current_balance || 0), 0);
-      const liveInvest = (accounts || [])
-        .filter((a: AccountRow) => {
-          const t = (a.account_type || '').toLowerCase();
-          return t === 'investment' || t === 'brokerage';
-        })
-        .reduce((sum: number, a: AccountRow) => sum + Number(a.current_balance || 0), 0);
-      const liveCredit = (accounts || [])
-        .filter((a: AccountRow) => (a.account_type || '').toLowerCase() === 'credit')
-        .reduce((sum: number, a: AccountRow) => sum + Number(a.current_balance || 0), 0);
-      const liveNetWorth = liveLiquid + liveInvest - liveCredit;
-
-      const rows = (snapshots || []) as SnapshotRow[];
-      let currentNetWorth = liveNetWorth;
-      let bmv = liveInvest;
-      let emv = liveInvest;
-      let usedSnapshots = false;
-
-      if (rows.length > 0) {
-        usedSnapshots = true;
-        bmv = Number(rows[0].investment_capital || 0);
-        emv = Number(rows[rows.length - 1].investment_capital || 0);
-        const last = rows[rows.length - 1];
-        currentNetWorth =
-          Number(last.liquid_capital || 0) +
-          Number(last.investment_capital || 0) -
-          Number(last.total_liabilities || 0);
-      }
-
-      if (!Number.isFinite(currentNetWorth) || (Math.abs(currentNetWorth) < 1 && !usedSnapshots && (!accounts || accounts.length === 0))) {
-        setEmptyReason('Link accounts or stamp a snapshot to project FI/RE capital.');
-        setData([]);
-        setLoading(false);
-        return;
-      }
-
-      const thirtyDaysAgo = new Date();
-      thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
-      const { data: invTx } = await supabase
-        .from('investment_transactions')
-        .select('amount, type')
-        .eq('user_id', userId)
-        .gte('date', thirtyDaysAgo.toISOString().split('T')[0]);
-
-      let externalCashFlow = 0;
-      (invTx || []).forEach((tx: { amount: number | string | null; type: string | null }) => {
-        if (tx.type === 'transfer' || tx.type === 'contribution') {
-          externalCashFlow += Number(tx.amount || 0) * -1;
-        }
-      });
-
-      const rorDecimal =
-        bmv > 0 ? (emv - bmv - externalCashFlow) / (bmv + 0.5 * externalCashFlow) : 0;
-      const periodRoR = rorDecimal * 100;
-
-      const currentAge = Number(profile?.current_age || 35);
-      const targetAge = Number(profile?.target_retirement_age || 55);
-      const yearsToTarget = Math.max(1, targetAge - currentAge);
-      const currentYear = new Date().getFullYear();
-      const targetRetirementYear = currentYear + yearsToTarget;
-
-      const projection: { year: number; Target: number; Actual: number | null }[] = [];
-      let simulatedNW = currentNetWorth;
-
-      for (let y = currentYear; y <= targetRetirementYear; y++) {
-        projection.push({
-          year: y,
-          Target: Math.round(simulatedNW),
-          Actual: y === currentYear ? Math.round(currentNetWorth) : null,
-        });
-        simulatedNW = simulatedNW * 1.08 + 42000;
-      }
-
-      const terminalTarget = projection[projection.length - 1]?.Target || 0;
-
-      setMetrics({
-        currentNW: currentNetWorth,
-        targetNW: terminalTarget,
-        ror: periodRoR,
-        isOnPace: periodRoR >= 0.66 || currentNetWorth > 0,
-      });
-      setData(projection);
-      setLoading(false);
-    }
-
-    if (userId) fetchWealthData();
-  }, [userId]);
-
-  if (loading) return <div className="h-64 bg-zinc-900 rounded-xl animate-pulse" />;
-
-  if (emptyReason || data.length === 0) {
+  if (!fire || !recomputed) {
     return (
       <div className="bg-zinc-900 rounded-xl border border-zinc-800 p-6 space-y-2">
         <h3 className="text-lg font-bold text-zinc-100">FI/RE Wealth Matrix</h3>
         <p className="text-sm text-zinc-500">
-          {emptyReason || 'No projection data yet. Stamp a snapshot or link investment accounts.'}
+          Link accounts and set SWR / burn in Configure Targets to project FI capital.
         </p>
       </div>
     );
   }
 
+  const chartData = recomputed.series.map((row) => ({
+    year: row.year,
+    Projected: row.projected,
+    'FI Target': row.fireTarget,
+  }));
+
   return (
     <div className="bg-zinc-900 rounded-xl border border-zinc-800 shadow-xl overflow-hidden">
-      <div className="p-6 border-b border-zinc-800 flex justify-between items-start">
+      <div className="p-6 border-b border-zinc-800 flex flex-wrap justify-between items-start gap-4">
         <div className="flex flex-col gap-1.5">
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-3 flex-wrap">
             <h3 className="text-lg font-bold text-zinc-100">FI/RE Wealth Matrix</h3>
             <span
               className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold border tracking-wide uppercase ${
-                metrics.isOnPace
+                recomputed.isOnPace
                   ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'
                   : 'bg-amber-500/10 text-amber-400 border-amber-500/20'
               }`}
             >
-              {metrics.isOnPace ? 'On Pace' : 'Audit Asset Mix'}
+              {recomputed.isOnPace ? 'On Pace' : 'Behind Pace'}
             </span>
           </div>
           <p className="text-xs text-zinc-400">
-            Current NW ${Math.round(metrics.currentNW).toLocaleString()} · Terminal $
-            {Math.round(metrics.targetNW).toLocaleString()}
+            Current NW ${Math.round(fire.current_nw).toLocaleString()} · FI target $
+            {Math.round(recomputed.fireTarget).toLocaleString()} ({recomputed.fireMultiplier}× burn @{' '}
+            {fire.swr_pct}% SWR)
           </p>
+          <p className="text-[11px] text-zinc-500 max-w-xl">{recomputed.paceReason}</p>
         </div>
-        <div className="text-right">
-          <p className="text-xs uppercase tracking-wider text-zinc-500 mb-1">Period RoR</p>
-          <p className={`text-xl font-bold ${metrics.ror >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
-            {metrics.ror > 0 ? '+' : ''}
-            {metrics.ror.toFixed(2)}%
+        <div className="text-right space-y-2">
+          <div>
+            <p className="text-xs uppercase tracking-wider text-zinc-500 mb-1">Progress to FI</p>
+            <p className="text-xl font-bold text-indigo-300">{recomputed.progressPct.toFixed(1)}%</p>
+          </div>
+          <label className="flex items-center gap-2 text-[11px] text-zinc-400 justify-end cursor-pointer">
+            <input
+              type="checkbox"
+              checked={useReal}
+              onChange={(e) => setUseReal(e.target.checked)}
+              className="rounded border-zinc-600 bg-zinc-950"
+            />
+            Real returns (deflate {fire.inflation_pct}% CPI)
+          </label>
+          <p className="text-[10px] text-zinc-500 font-mono">
+            Using {recomputed.effectiveReturnPct.toFixed(1)}%{' '}
+            {useReal ? 'real' : 'nominal'} · +$
+            {Math.round(fire.annual_contribution).toLocaleString()}/yr contrib
           </p>
         </div>
       </div>
@@ -181,11 +109,11 @@ export default function WealthMatrixChart({ userId }: { userId: string }) {
       <div className="p-6">
         <div className="h-64 w-full">
           <ResponsiveContainer width="100%" height="100%">
-            <AreaChart data={data} margin={{ top: 10, right: 0, left: 0, bottom: 0 }}>
+            <AreaChart data={chartData} margin={{ top: 10, right: 8, left: 0, bottom: 0 }}>
               <defs>
-                <linearGradient id="colorTarget" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.3} />
-                  <stop offset="95%" stopColor="#3b82f6" stopOpacity={0} />
+                <linearGradient id="colorProjected" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="5%" stopColor="#6366f1" stopOpacity={0.35} />
+                  <stop offset="95%" stopColor="#6366f1" stopOpacity={0} />
                 </linearGradient>
               </defs>
               <XAxis dataKey="year" stroke="#71717a" fontSize={12} tickLine={false} axisLine={false} />
@@ -194,7 +122,11 @@ export default function WealthMatrixChart({ userId }: { userId: string }) {
                 fontSize={12}
                 tickLine={false}
                 axisLine={false}
-                tickFormatter={(val) => `$${val / 1000}k`}
+                tickFormatter={(val) =>
+                  Math.abs(Number(val)) >= 1_000_000
+                    ? `$${(Number(val) / 1_000_000).toFixed(1)}M`
+                    : `$${Math.round(Number(val) / 1000)}k`
+                }
               />
               <Tooltip
                 contentStyle={{
@@ -203,24 +135,32 @@ export default function WealthMatrixChart({ userId }: { userId: string }) {
                   borderRadius: '0.5rem',
                   color: '#f4f4f5',
                 }}
-                formatter={(value: number | string) => [`$${Number(value).toLocaleString()}`, '']}
+                formatter={(value) => [`$${Number(value ?? 0).toLocaleString()}`, '']}
                 labelStyle={{ color: '#a1a1aa', marginBottom: '4px' }}
               />
+              {recomputed.fireTarget > 0 && (
+                <ReferenceLine
+                  y={recomputed.fireTarget}
+                  stroke="#f59e0b"
+                  strokeDasharray="4 4"
+                  label={{ value: 'FI', fill: '#f59e0b', fontSize: 10 }}
+                />
+              )}
               <Area
                 type="monotone"
-                dataKey="Target"
-                stroke="#3b82f6"
+                dataKey="Projected"
+                stroke="#6366f1"
                 strokeWidth={2}
                 fillOpacity={1}
-                fill="url(#colorTarget)"
+                fill="url(#colorProjected)"
               />
               <Area
                 type="monotone"
-                dataKey="Actual"
-                stroke="#10b981"
-                strokeWidth={4}
+                dataKey="FI Target"
+                stroke="#f59e0b"
+                strokeWidth={1.5}
+                strokeDasharray="6 4"
                 fill="none"
-                activeDot={{ r: 6, fill: '#10b981' }}
               />
             </AreaChart>
           </ResponsiveContainer>

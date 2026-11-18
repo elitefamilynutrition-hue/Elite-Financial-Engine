@@ -108,12 +108,12 @@ Core Plaid link/sync, telemetry UI, forensic audit, baselines/snapshots (now at 
 ### Week 1–3 SaaS hardening (AGENT_BRIEFS) — largely COMPLETE in code
 Invite gate, hardcode scrub, snapshot unify, classify-in-sync, cursor default, dashboard aggregates, rate limits, Stripe checkout + webhook + Gemini entitlement (402), privacy/terms + export/delete, ECE branding. **Live Stripe Product/Price/webhook go-live deferred** until pricing and public URL are final.
 
-### Week 4 differentiation (NOT started / not shipped)
-* Account exclusion from net worth (UGMA / non-operational).
-* Profile setup / recalculate API polish.
-* Savings ratio + subscription leak engine UI (**no** `SavingsRatioCard` / `SubscriptionAuditCard` files yet).
-* WealthMatrix polish / Rule-of-25 productization.
-* Affiliate / balance-transfer layer (optional).
+### Week 4 differentiation — SHIPPED (affiliate skipped)
+* Account exclusion (`exclude_from_net_worth`) + Balance Sheet checkbox.
+* `POST /api/profile/setup` + `/api/profile/recalculate`.
+* `SavingsRatioCard` + `SubscriptionAuditCard` via dashboard heuristics.
+* WealthMatrix Rule-of-SWR + real-return toggle (`lib/analytics/fire-projection.ts`).
+* Affiliate CTA consciously skipped (disclosure).
 
 ---
 

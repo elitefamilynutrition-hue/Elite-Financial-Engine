@@ -18,7 +18,7 @@ Every tenant table: `PERMISSIVE` / `ALL` / `TO public` / `USING (auth.uid() = us
 
 | Table | Policy name |
 |-------|-------------|
-| `financial_accounts` | Users can manage their own financial accounts |
+| `financial_accounts` | Users can manage their own financial accounts (`exclude_from_net_worth` for UGMA / non-operational) |
 | `program_baselines` | Users can manage their own baselines |
 | `monthly_telemetry_snapshots` | Users can manage their own snapshots |
 | `paystub_records` | Users can manage their own paystub records |
