@@ -177,15 +177,17 @@ P2: Add /privacy and /terms pages (accurate stubs), footer/nav links, and a "Not
 ---
 ### Day 4 — Sentry + CI
 **You first**
-- Create Sentry project; get DSN.
-**Agent**
-P2: Add Sentry for Next App Router (client + server) via SENTRY_DSN env. Add .github/workflows/ci.yml: npm ci, lint, build on PR/push. Do not change product features. Keep config minimal.
-
+- Create Sentry project; set `SENTRY_DSN` + `NEXT_PUBLIC_SENTRY_DSN` (same value) in `.env.local`.
+**Shipped**
+- `@sentry/nextjs` + `instrumentation.ts` / `instrumentation-client.ts` + server/edge configs (no-op when DSN unset)
+- `app/global-error.tsx` reports client boundary errors
+- Runtime-only Sentry (no `withSentryConfig` / source-map upload; no auth token required)
+- `.github/workflows/ci.yml` — npm ci, lint, build on push/PR to main|master
 
 **Done when**
-- [ ] Test error appears in Sentry (dev) OR init is clearly wired
-- [ ] CI workflow file exists
-- [ ] Committed
+- [x] Test error appears in Sentry (dev) OR init is clearly wired
+- [x] CI workflow file exists
+- [x] Committed
 ---
 ### Day 5 — Ledger truth + env example + metadata
 **Ask**
@@ -335,7 +337,7 @@ Stop. Do not continue into other issues. Finish only the acceptance criteria alr
 | 3 | 1 Stripe checkout | ☑ |
 | 3 | 2 Entitlements | ☑ |
 | 3 | 3 Legal/export | ☑ |
-| 3 | 4 Sentry/CI | ☐ |
+| 3 | 4 Sentry/CI | ☑ |
 | 3 | 5 Ledger/env | ☑ |
 | 4 | 0 Category burn UX | ☑ |
 | 4 | Catch-up burn/sinking/anomaly | ☑ |

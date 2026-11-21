@@ -92,10 +92,6 @@ export default function DayZeroIntake({ onComplete }: { onComplete: () => void }
     sinking_funds: [] as { fund_name: string; target_amount: string; due_date: string; recurring_schedule: string }[],
   });
 
-  useEffect(() => {
-    fetchExistingPaystubCount();
-  }, []);
-
   const fetchExistingPaystubCount = async () => {
     try {
       const { data: { session } } = await supabase.auth.getSession();
@@ -116,6 +112,10 @@ export default function DayZeroIntake({ onComplete }: { onComplete: () => void }
       console.error('Failed to check existing paystub count:', err);
     }
   };
+
+  useEffect(() => {
+    void fetchExistingPaystubCount();
+  }, []);
 
   const addSinkingFund = () => {
     setFormData(prev => ({
