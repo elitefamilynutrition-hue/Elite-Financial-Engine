@@ -184,29 +184,22 @@ P2: Add /privacy and /terms pages (accurate stubs), footer/nav links, and a "Not
 - Runtime-only Sentry (no `withSentryConfig` / source-map upload; no auth token required)
 - `.github/workflows/ci.yml` — npm ci, lint, build on push/PR to main|master
 
+**Operator note**
+- DSN wired in `.env.local` (gitignored). Smoke test (`Sentry smoke test`) verified in Sentry Issues. Restart `npm run dev` after any DSN change.
+- Upgrade/Stripe console errors are expected until go-live — not Sentry failures.
+
 **Done when**
 - [x] Test error appears in Sentry (dev) OR init is clearly wired
 - [x] CI workflow file exists
 - [x] Committed
 ---
 ### Day 5 — Ledger truth + env example + metadata
-**Ask**
-Diff MASTER_LEDGER.md registry/roadmap vs actual files under components/ and app/api/. List false claims and missing entries. Do not edit yet.
-
-
-**Agent**
-P2: Reconcile MASTER_LEDGER.md with the filesystem.
-
-Remove registry entries for files that don't exist.
-Mark Phase 7/8 status accurately.
-Add .env.example with required keys (no secret values).
-Fix app metadata away from "Create Next App".
-
 **Shipped**
 - `MASTER_LEDGER.md` reconciled: Next 16, fail-closed crypto, supabase-admin, removed false `telemetry/baseline|snapshot|paystub`, added ECE routes/components, schema → `SCHEMA.md` + migrations
-- Phase 6 split (webhook verify done; cron / prod ops open); Week 4 items explicitly not shipped
-- `.env.example` keys only
-- `app/layout.tsx` metadata already Elite Capital Engine (confirmed)
+- Phase 6 split (webhook verify done; cron shipped in Phase 6.3 below)
+- Week 4 differentiation shipped (see WEEK 4)
+- `.env.example` keys only (incl. Sentry + `CRON_SECRET`)
+- `app/layout.tsx` metadata Elite Capital Engine
 
 **Done when**
 - [x] Ledger matches repo
@@ -301,6 +294,37 @@ Fix app metadata away from "Create Next App".
 - [x] CTA + disclosure OR consciously skipped
 - [x] Committed if shipped (N/A — skipped)
 ---
+## NEXT / ops (post Week 4)
+
+### Phase 6.3 — Vercel Cron nightly sync + snapshots — SHIPPED
+**Shipped**
+- `GET|POST /api/cron/nightly` — `CRON_SECRET` via `Authorization: Bearer` or `x-cron-secret`
+- Proxy exempts `/api/cron/*` (no session cookies)
+- Per user with `plaid_items`: resume-cursor sync (`lib/plaid/sync-user.ts`) then `stampHistoricalSnapshot` (`lib/analytics/stamp-snapshot.ts`)
+- `vercel.json` cron `0 12 * * *` UTC → `/api/cron/nightly`
+- Session routes thinned to call the same helpers (`/api/plaid/sync-transactions`, `/api/snapshot`)
+
+**Operator**
+- Set `CRON_SECRET` in Vercel env **and** `.env.local` for manual curls.
+- Cron **only fires on Vercel deploy**. Local/dev stays **Sync Telemetry** + **Stamp Snapshot**.
+- Manual test: `curl -X POST "$NEXT_PUBLIC_APP_URL/api/cron/nightly" -H "Authorization: Bearer $CRON_SECRET"`
+
+**Done when**
+- [x] Cron route exists, secret-gated
+- [x] Multi-tenant sync+snapshot loop
+- [x] vercel.json present
+- [x] Committed
+
+### Still open / deferred
+| Item | Status | Notes |
+|------|--------|-------|
+| Phase 6.2b Plaid Production webhook URL cutover | ☐ ops | Code supports `PLAID_ENV=production`; dashboard URL is operator-owned |
+| Stripe go-live (live Product/Price/webhook) | deferred **last** | Skeleton + entitlement already shipped; Upgrade errors expected until keys |
+| Webhook job queue | stretch only | Only if syncs actually time out |
+| GOD MODE / market analysis | deferred | Not ECE public product; education vs advice; private lab charter later |
+| Affiliate CTA | skipped | Disclosure-heavy; prefer no ship |
+
+---
 ## Stretch (Weeks 5–6) — only if needed
 Use **Ask** for design; Agent only for a single agreed slice.
 | Topic | Ask focus | Agent only if… |
@@ -337,7 +361,7 @@ Stop. Do not continue into other issues. Finish only the acceptance criteria alr
 | 3 | 1 Stripe checkout | ☑ |
 | 3 | 2 Entitlements | ☑ |
 | 3 | 3 Legal/export | ☑ |
-| 3 | 4 Sentry/CI | ☑ |
+| 3 | 4 Sentry/CI | ☑ (DSN smoke verified) |
 | 3 | 5 Ledger/env | ☑ |
 | 4 | 0 Category burn UX | ☑ |
 | 4 | Catch-up burn/sinking/anomaly | ☑ |
@@ -346,4 +370,8 @@ Stop. Do not continue into other issues. Finish only the acceptance criteria alr
 | 4 | 3 Savings/subs (+ leak/seasonal) | ☑ |
 | 4 | 4 WealthMatrix | ☑ |
 | 4 | 5 Affiliate opt | ☑ skipped |
+| 6 | 2b Plaid prod webhook ops | ☐ |
+| 6 | 3 Nightly cron sync+snapshot | ☑ |
+| — | Stripe go-live | deferred (last) |
+| — | Webhook job queue | stretch / if timeouts |
 | — | GOD MODE / markets | deferred |

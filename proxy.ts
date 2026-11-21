@@ -39,7 +39,8 @@ export async function proxy(request: NextRequest) {
     !request.nextUrl.pathname.startsWith('/privacy') &&
     !request.nextUrl.pathname.startsWith('/terms') &&
     !request.nextUrl.pathname.startsWith('/api/plaid/webhook') &&
-    !request.nextUrl.pathname.startsWith('/api/billing/webhook')
+    !request.nextUrl.pathname.startsWith('/api/billing/webhook') &&
+    !request.nextUrl.pathname.startsWith('/api/cron/')
   ) {
     const url = request.nextUrl.clone();
     url.pathname = '/login';

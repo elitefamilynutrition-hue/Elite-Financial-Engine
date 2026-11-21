@@ -103,7 +103,7 @@ Core Plaid link/sync, telemetry UI, forensic audit, baselines/snapshots (now at 
 * **[x] 6.1** Auth + RLS binding; invite-gated signup; session-scoped APIs via `requireUser` / `.eq('user_id')`.
 * **[x] 6.2a** Plaid webhook JWT signature verification (`lib/plaid/verify-webhook.ts`).
 * **[ ] 6.2b** Formal Plaid Production dashboard cutover / webhook URL ops (env-dependent; code supports `PLAID_ENV=production`).
-* **[ ] 6.3** Vercel Cron nightly background sync.
+* **[x] 6.3** Vercel Cron nightly sync + `historical_snapshots` (`/api/cron/nightly`, `CRON_SECRET`, `vercel.json` `0 12 * * *` UTC). Local stays manual Sync + Stamp Snapshot.
 
 ### Week 1–3 SaaS hardening (AGENT_BRIEFS) — largely COMPLETE in code
 Invite gate, hardcode scrub, snapshot unify, classify-in-sync, cursor default, dashboard aggregates, rate limits, Stripe checkout + webhook + Gemini entitlement (402), privacy/terms + export/delete, ECE branding. **Live Stripe Product/Price/webhook go-live deferred** until pricing and public URL are final.
@@ -123,7 +123,7 @@ Invite gate, hardcode scrub, snapshot unify, classify-in-sync, cursor default, d
 Copy `.env.example` → `.env.local` and fill values (never commit secrets).
 
 Required / common keys:
-`NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`, `PLAID_CLIENT_ID`, `PLAID_SECRET`, `PLAID_ENV`, `PLAID_WEBHOOK_URL`, `GEMINI_API_KEY`, `ENCRYPTION_KEY`, `NEXT_PUBLIC_INVITE_CODE`, `ADMIN_EMAILS`, `NEXT_PUBLIC_APP_URL`, `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, `STRIPE_PRICE_ID` (Stripe optional until go-live), `SENTRY_DSN` + `NEXT_PUBLIC_SENTRY_DSN` (Week 3 Day 4; omit to disable).
+`NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`, `PLAID_CLIENT_ID`, `PLAID_SECRET`, `PLAID_ENV`, `PLAID_WEBHOOK_URL`, `GEMINI_API_KEY`, `ENCRYPTION_KEY`, `NEXT_PUBLIC_INVITE_CODE`, `ADMIN_EMAILS`, `NEXT_PUBLIC_APP_URL`, `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, `STRIPE_PRICE_ID` (Stripe optional until go-live), `SENTRY_DSN` + `NEXT_PUBLIC_SENTRY_DSN` (omit to disable), `CRON_SECRET` (Phase 6.3; Vercel Cron Bearer).
 
 ### Dev server
 ```powershell
@@ -145,4 +145,6 @@ Load `http://localhost:3000`.
 
 * **Sep 2026:** Phases 2–5 — baselines, snapshots, paystubs/vision, profile + simulator, crypto, Plaid webhook.
 * **Nov 2026 Weeks 1–2:** Multi-tenant hardening — classifier tenant fix, sync `user_id`, webhook JWT, schema/RLS migrations, invite gate, snapshot unify, classify-in-sync, cursor resume, dashboard API, rate limits.
-* **Nov 2026 Week 3:** Stripe skeleton + entitlement, legal stubs + export/delete, ECE branding scrub, ledger reconciliation + `.env.example`.
+* **Nov 2026 Week 3:** Stripe skeleton + entitlement, legal stubs + export/delete, ECE branding scrub, ledger reconciliation + `.env.example`, Sentry + CI.
+* **Nov 2026 Week 4:** Account exclusion, profile setup/recalculate, savings/leak cards, FI Wealth Matrix; affiliate skipped.
+* **Nov 2026 Phase 6.3:** Nightly Vercel Cron sync + historical snapshots (`CRON_SECRET`).
