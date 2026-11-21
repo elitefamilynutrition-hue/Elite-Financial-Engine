@@ -69,6 +69,7 @@ The Elite Capital Engine is an automated financial telemetry and forensic auditi
 * **`app/api/plaid/webhook/route.ts`** — Signed webhook; sync only (no Gemini).
 * **`app/api/baseline/route.ts`** — Day-zero / baseline telemetry (**not** `telemetry/baseline`).
 * **`app/api/snapshot/route.ts`** — Snapshot writer (**not** `telemetry/snapshot`).
+* **`app/api/cron/nightly/route.ts`** — `CRON_SECRET`-gated nightly sync + snapshot (Vercel Cron).
 * **`app/api/telemetry/dashboard/route.ts`** — Server dashboard aggregates.
 * **`app/api/telemetry/vision/route.ts`** — Paystub OCR (entitlement-gated).
 * **`app/api/telemetry/transactions/route.ts`** — Gemini classify batch (entitlement-gated).
