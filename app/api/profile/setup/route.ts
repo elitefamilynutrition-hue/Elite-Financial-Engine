@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { requireUser } from '@/lib/auth/require-user';
+import { requireActiveSubscription } from '@/lib/auth/require-entitlement';
 import { toErrorResponse } from '@/lib/http/api-error';
 import { getServiceSupabase } from '@/lib/supabase-admin';
 import { loadUserFinancials } from '@/lib/data/user-financials';
@@ -13,6 +14,7 @@ import { computeWealthQuota } from '@/lib/analytics/wealth-quota';
 export async function POST(request: Request) {
   try {
     const user = await requireUser();
+    await requireActiveSubscription(user);
     const body = await request.json();
     const supabase = getServiceSupabase();
 

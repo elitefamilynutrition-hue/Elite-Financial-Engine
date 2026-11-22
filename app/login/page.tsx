@@ -136,6 +136,10 @@ export default function LoginPage() {
         </form>
 
         <p className="text-center text-xs text-zinc-500">
+          <Link href="/about" className="hover:text-zinc-300 underline-offset-2 hover:underline">
+            About
+          </Link>
+          {' · '}
           <Link href="/privacy" className="hover:text-zinc-300 underline-offset-2 hover:underline">
             Privacy
           </Link>

@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useCallback } from 'react';
+import Link from 'next/link';
 import PaystubDropzone from '@/components/PayStubDropzone';
 import { supabase } from '@/lib/supabase';
 import { calculateMarginalTaxBracket } from '@/components/DayZeroIntake';
@@ -12,7 +13,7 @@ interface SettingsDrawerProps {
 }
 
 export default function SettingsDrawer({ isOpen, onClose, onSaved }: SettingsDrawerProps) {
-  const [activeTab, setActiveTab] = useState<'architecture' | 'funds' | 'paystub'>('architecture');
+  const [activeTab, setActiveTab] = useState<'architecture' | 'funds' | 'paystub' | 'legal'>('architecture');
   const [loading, setLoading] = useState(false);
   const [statusMsg, setStatusMsg] = useState<{ text: string; type: 'success' | 'error' } | null>(null);
   const [latestPayDate, setLatestPayDate] = useState<string | null>(null);
@@ -267,7 +268,7 @@ export default function SettingsDrawer({ isOpen, onClose, onSaved }: SettingsDra
           </div>
 
           {/* Dynamic Tabs */}
-          <div className="grid grid-cols-3 gap-1 bg-zinc-950 p-1 rounded-lg border border-zinc-800">
+          <div className="grid grid-cols-4 gap-1 bg-zinc-950 p-1 rounded-lg border border-zinc-800">
             <button
               onClick={() => { setActiveTab('architecture'); setStatusMsg(null); }}
               className={`py-2 text-xs font-semibold rounded-md transition ${activeTab === 'architecture' ? 'bg-zinc-800 text-white' : 'text-zinc-500 hover:text-zinc-300'}`}
@@ -285,6 +286,12 @@ export default function SettingsDrawer({ isOpen, onClose, onSaved }: SettingsDra
               className={`py-2 text-xs font-semibold rounded-md transition ${activeTab === 'paystub' ? 'bg-zinc-800 text-white' : 'text-zinc-500 hover:text-zinc-300'}`}
             >
               Paystub OCR
+            </button>
+            <button
+              onClick={() => { setActiveTab('legal'); setStatusMsg(null); }}
+              className={`py-2 text-xs font-semibold rounded-md transition ${activeTab === 'legal' ? 'bg-zinc-800 text-white' : 'text-zinc-500 hover:text-zinc-300'}`}
+            >
+              Legal
             </button>
           </div>
 
@@ -459,6 +466,37 @@ export default function SettingsDrawer({ isOpen, onClose, onSaved }: SettingsDra
                 checkPaystubCompliance();
                 onSaved();
               }} />
+            </div>
+          )}
+
+          {activeTab === 'legal' && (
+            <div className="space-y-4 text-sm animate-in fade-in duration-300">
+              <div className="p-3 rounded-lg border border-amber-900/50 bg-amber-950/20 text-amber-200/90 text-xs leading-relaxed">
+                Elite Capital Engine is educational telemetry only — not financial, tax, legal, or
+                investment advice. AI outputs can be wrong. Verify before you act. Policies below are
+                working stubs and have not been reviewed by counsel.
+              </div>
+              <ul className="space-y-2 text-zinc-300">
+                <li>
+                  <Link href="/about" onClick={onClose} className="text-indigo-400 hover:text-indigo-300">
+                    About Elite Capital Engine
+                  </Link>
+                </li>
+                <li>
+                  <Link href="/privacy" onClick={onClose} className="text-indigo-400 hover:text-indigo-300">
+                    Privacy
+                  </Link>
+                </li>
+                <li>
+                  <Link href="/terms" onClick={onClose} className="text-indigo-400 hover:text-indigo-300">
+                    Terms of use (incl. subscription / EULA-style terms)
+                  </Link>
+                </li>
+              </ul>
+              <p className="text-[11px] text-zinc-500 leading-relaxed">
+                Subscription: 7-day trial, then $20/month via Stripe. Manage or cancel through Stripe
+                customer receipts / portal when available.
+              </p>
             </div>
           )}
         </div>

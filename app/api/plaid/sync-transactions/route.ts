@@ -1,5 +1,7 @@
 ﻿import { NextResponse, NextRequest } from 'next/server';
 import { createServerSupabaseClient } from '@/lib/supabase-server';
+import { requireActiveSubscription } from '@/lib/auth/require-entitlement';
+import { toErrorResponse } from '@/lib/http/api-error';
 import { checkRateLimit, rateLimitResponse } from '@/lib/http/rate-limit';
 import { syncUserTransactions } from '@/lib/plaid/sync-user';
 
@@ -14,6 +16,8 @@ export async function POST(request: NextRequest) {
     if (authError || !user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
+
+    await requireActiveSubscription(user);
 
     const limited = checkRateLimit(`plaid-sync:${user.id}`, 10, 60_000);
     if (!limited.ok) return rateLimitResponse(limited.retryAfterSec);
@@ -35,6 +39,9 @@ export async function POST(request: NextRequest) {
       sync_errors: result.sync_errors.length > 0 ? result.sync_errors : undefined,
     });
   } catch (error: unknown) {
+    const apiRes = toErrorResponse(error, 'plaid-sync');
+    if (apiRes.status !== 500) return apiRes;
+
     const err = error as {
       response?: { data?: { error_message?: string } };
       message?: string;

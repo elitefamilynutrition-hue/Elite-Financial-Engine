@@ -1,16 +1,13 @@
 import type { User } from '@supabase/supabase-js';
 import { getServiceSupabase } from '@/lib/supabase-admin';
 import { ApiError } from '@/lib/http/api-error';
+import { isSubscriptionActive } from '@/lib/billing/subscription';
 
-const ACTIVE_STATUSES = new Set(['active', 'trialing']);
-
-export function isSubscriptionActive(status: string | null | undefined): boolean {
-  return ACTIVE_STATUSES.has((status || '').toLowerCase());
-}
+export { isSubscriptionActive };
 
 /**
- * Blocks Gemini-heavy routes unless the user's profile has an active/trialing
- * Stripe subscription. Throws ApiError 402 when inactive.
+ * Blocks product routes unless the user has an active or trialing Stripe
+ * subscription. Throws ApiError 402 when inactive.
  */
 export async function requireActiveSubscription(user: User): Promise<void> {
   const supabase = getServiceSupabase();
@@ -27,7 +24,7 @@ export async function requireActiveSubscription(user: User): Promise<void> {
 
   if (!isSubscriptionActive(data?.subscription_status)) {
     throw ApiError.paymentRequired(
-      'An active Elite Capital Engine subscription is required for AI features. Use Upgrade to subscribe.'
+      'An active Elite Capital Engine subscription is required. Start your 7-day trial ($20/mo after) to continue.'
     );
   }
 }

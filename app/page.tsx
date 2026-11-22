@@ -21,6 +21,7 @@ import { SubscriptionAuditCard, type SubscriptionLeakRow } from '@/components/Da
 import { formatCategoryLabel } from '@/lib/format/category-label';
 import type { CategoryBucketId } from '@/lib/analytics/category-buckets';
 import { computeLiveNetWorth } from '@/lib/analytics/net-worth';
+import { isSubscriptionActive } from '@/lib/billing/subscription';
 
 function DashboardContent() {
   const searchParams = useSearchParams();
@@ -46,6 +47,8 @@ function DashboardContent() {
   const [userId, setUserId] = useState<string>('');
   const [isSnapshotting, setIsSnapshotting] = useState(false);
   const [isUpgrading, setIsUpgrading] = useState(false);
+  const [entitlementChecked, setEntitlementChecked] = useState(false);
+  const [hasSubscription, setHasSubscription] = useState(false);
   const [burnBucketId, setBurnBucketId] = useState<CategoryBucketId | null>(null);
   const [burnBuckets, setBurnBuckets] = useState<
     { bucketId: CategoryBucketId; label: string; amount: number; dominantIntent: 'survival' | 'creep'; percentage: number }[]
@@ -75,12 +78,12 @@ function DashboardContent() {
       if (!res.ok || !data.url) {
         throw new Error(
           data.error ||
-            'Checkout is not available yet. Stripe keys are not configured — billing is deferred until go-live.'
+            'Checkout is not available. Confirm Stripe test keys are set on this deployment.'
         );
       }
       window.location.href = data.url;
     } catch (err: unknown) {
-      console.error('Upgrade checkout failed:', err);
+      console.error('Trial checkout failed:', err);
       alert(err instanceof Error ? err.message : 'Unable to start checkout.');
       setIsUpgrading(false);
     }
@@ -89,20 +92,29 @@ function DashboardContent() {
   useEffect(() => {
     const checkProfileStatus = async () => {
       const { data: { session } } = await supabase.auth.getSession();
-      if (!session?.user?.id) return;
-      
+      if (!session?.user?.id) {
+        setEntitlementChecked(true);
+        return;
+      }
+
+      setUserId(session.user.id);
+
       const { data, error } = await supabase
         .from('user_financial_profiles')
-        .select('id')
+        .select('id, subscription_status')
         .eq('user_id', session.user.id)
-        .single();
-        
-      if (error || !data) {
+        .maybeSingle();
+
+      const entitled = isSubscriptionActive(data?.subscription_status);
+      setHasSubscription(entitled);
+      setEntitlementChecked(true);
+
+      if (entitled && (error || !data?.id)) {
         setNeedsOnboarding(true);
       }
     };
     checkProfileStatus();
-  }, []);
+  }, [searchParams]);
 
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editValue, setEditValue] = useState('');
@@ -185,8 +197,10 @@ function DashboardContent() {
   };
 
   useEffect(() => {
-    fetchDashboardData();
-  }, []);
+    if (hasSubscription) {
+      fetchDashboardData();
+    }
+  }, [hasSubscription]);
 
   const runGeminiAudit = async () => {
     setIsAuditing(true);
@@ -323,6 +337,69 @@ function DashboardContent() {
     </div>
   );
 
+  if (!entitlementChecked) {
+    return (
+      <main className="min-h-screen bg-zinc-950 flex items-center justify-center text-zinc-500">
+        Checking subscription…
+      </main>
+    );
+  }
+
+  if (!hasSubscription) {
+    return (
+      <main className="min-h-screen bg-zinc-950 text-zinc-100 p-8 flex items-center justify-center">
+        <div className="w-full max-w-lg space-y-6 border border-zinc-800 bg-zinc-900/80 rounded-xl p-8">
+          <div className="space-y-2">
+            <p className="text-xs uppercase tracking-wider text-zinc-500">Elite Capital Engine</p>
+            <h1 className="text-2xl font-bold text-white">Start your 7-day trial</h1>
+            <p className="text-sm text-zinc-400 leading-relaxed">
+              Invite beta access requires an active subscription. Card on file —{' '}
+              <span className="text-zinc-200">7 days free</span>, then{' '}
+              <span className="text-zinc-200">$20/month</span>. Cancel anytime in Stripe.
+            </p>
+          </div>
+          <p className="text-xs text-zinc-500 leading-relaxed">
+            Not financial, tax, or investment advice. By continuing you agree to the{' '}
+            <Link href="/terms" className="text-indigo-400 hover:underline">
+              Terms
+            </Link>{' '}
+            and{' '}
+            <Link href="/privacy" className="text-indigo-400 hover:underline">
+              Privacy
+            </Link>{' '}
+            stubs.
+          </p>
+          <div className="flex flex-col sm:flex-row gap-3">
+            <button
+              onClick={startCheckout}
+              disabled={isUpgrading}
+              className="flex-1 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white font-semibold py-3 px-4 rounded-lg transition text-sm"
+            >
+              {isUpgrading ? 'Redirecting…' : 'Start 7-day trial'}
+            </button>
+            <button
+              onClick={handleSignOut}
+              className="bg-zinc-950 hover:bg-zinc-800 border border-zinc-700 text-zinc-400 hover:text-zinc-200 font-semibold py-3 px-4 rounded-lg transition text-sm"
+            >
+              Sign out
+            </button>
+          </div>
+          <nav className="flex gap-4 text-xs text-zinc-500 pt-2">
+            <Link href="/about" className="hover:text-zinc-300 underline-offset-2 hover:underline">
+              About
+            </Link>
+            <Link href="/privacy" className="hover:text-zinc-300 underline-offset-2 hover:underline">
+              Privacy
+            </Link>
+            <Link href="/terms" className="hover:text-zinc-300 underline-offset-2 hover:underline">
+              Terms
+            </Link>
+          </nav>
+        </div>
+      </main>
+    );
+  }
+
   return (
     <main className="min-h-screen bg-zinc-950 text-zinc-100 p-8">
       {needsOnboarding && (
@@ -339,13 +416,6 @@ function DashboardContent() {
             <p className="text-zinc-400 text-sm">Automated sync and intelligent portfolio telemetry</p>
           </div>
           <div className="flex items-center gap-3 flex-wrap justify-end">
-            <button
-              onClick={startCheckout}
-              disabled={isUpgrading}
-              className="bg-amber-600 hover:bg-amber-500 disabled:opacity-50 text-white font-semibold py-2.5 px-4 rounded-lg transition text-sm"
-            >
-              {isUpgrading ? 'Redirecting…' : 'Upgrade'}
-            </button>
             <button
               onClick={handleSignOut}
               className="bg-zinc-950 hover:bg-zinc-800 border border-zinc-700 text-zinc-400 hover:text-zinc-200 font-semibold py-2.5 px-4 rounded-lg transition text-sm"
@@ -671,8 +741,11 @@ function DashboardContent() {
         )}
 
         <footer className="border-t border-zinc-800 pt-6 pb-2 flex flex-wrap items-center justify-between gap-3 text-xs text-zinc-500">
-          <span>Elite Capital Engine</span>
+          <span>Elite Capital Engine · Not financial advice</span>
           <nav className="flex gap-4">
+            <Link href="/about" className="hover:text-zinc-300 underline-offset-2 hover:underline">
+              About
+            </Link>
             <Link href="/privacy" className="hover:text-zinc-300 underline-offset-2 hover:underline">
               Privacy
             </Link>

@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { requireUser } from '@/lib/auth/require-user';
+import { requireActiveSubscription } from '@/lib/auth/require-entitlement';
 import { toErrorResponse } from '@/lib/http/api-error';
 import { stampHistoricalSnapshot } from '@/lib/analytics/stamp-snapshot';
 
@@ -9,6 +10,7 @@ import { stampHistoricalSnapshot } from '@/lib/analytics/stamp-snapshot';
 export async function POST() {
   try {
     const user = await requireUser();
+    await requireActiveSubscription(user);
     const stamped = await stampHistoricalSnapshot(user.id);
 
     return NextResponse.json({

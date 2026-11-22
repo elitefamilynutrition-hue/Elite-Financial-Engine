@@ -1,8 +1,10 @@
 ﻿import { NextResponse } from 'next/server';
 import { plaidClient } from '@/lib/plaid';
-import { getServiceSupabase } from '@/lib/supabase';
+import { getServiceSupabase } from '@/lib/supabase-admin';
 import { createServerSupabaseClient } from '@/lib/supabase-server';
 import { encryptToken } from '@/lib/crypto';
+import { requireActiveSubscription } from '@/lib/auth/require-entitlement';
+import { toErrorResponse } from '@/lib/http/api-error';
 
 export async function POST(req: Request) {
   try {
@@ -12,6 +14,8 @@ export async function POST(req: Request) {
     if (authError || !user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
+
+    await requireActiveSubscription(user);
 
     const { public_token, institution_id, institution_name } = await req.json();
 
@@ -75,10 +79,13 @@ export async function POST(req: Request) {
     }
 
     return NextResponse.json({ status: 'SUCCESS', item_id: itemId });
-  } catch (error: any) {
-    console.error('Exchange Token Error:', error?.response?.data || error.message || error);
+  } catch (error: unknown) {
+    const apiRes = toErrorResponse(error, 'plaid-exchange');
+    if (apiRes.status !== 500) return apiRes;
+    const err = error as { response?: { data?: { error_message?: string } }; message?: string };
+    console.error('Exchange Token Error:', err?.response?.data || err.message || error);
     return NextResponse.json(
-      { error: error?.response?.data?.error_message || error.message || 'Token exchange failed.' },
+      { error: err?.response?.data?.error_message || err.message || 'Token exchange failed.' },
       { status: 500 }
     );
   }

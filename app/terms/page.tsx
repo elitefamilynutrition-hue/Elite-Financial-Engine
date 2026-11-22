@@ -2,11 +2,11 @@ import Link from 'next/link';
 
 export const metadata = {
   title: 'Terms — Elite Capital Engine',
-  description: 'Terms stub for Elite Capital Engine',
+  description: 'Terms of use for Elite Capital Engine',
 };
 
 /**
- * Plain-English terms stub. Not counsel-reviewed.
+ * Plain-English terms stub (incl. subscription / EULA-style license). Not counsel-reviewed.
  */
 export default function TermsPage() {
   return (
@@ -22,10 +22,12 @@ export default function TermsPage() {
         </div>
 
         <section className="space-y-3 text-sm leading-relaxed text-zinc-300">
-          <h2 className="text-lg font-semibold text-white">Service</h2>
+          <h2 className="text-lg font-semibold text-white">Service &amp; license</h2>
           <p>
             Elite Capital Engine (ECE) provides personal finance telemetry and optional AI tools.
-            Access may be invite-gated. Features can change as the product evolves.
+            Subject to these terms, we grant you a limited, non-exclusive, non-transferable license
+            to use the web app for your own personal finances. We may revoke access for abuse,
+            non-payment, or security risk. Access may remain invite-gated during beta.
           </p>
         </section>
 
@@ -35,6 +37,19 @@ export default function TermsPage() {
             ECE is educational and analytical only. Nothing in the app is financial, tax, legal, or
             investment advice, and we are not your fiduciary. You alone decide what to do with any
             output.
+          </p>
+        </section>
+
+        <section className="space-y-3 text-sm leading-relaxed text-zinc-300">
+          <h2 className="text-lg font-semibold text-white">Subscription &amp; billing</h2>
+          <p>
+            Product use requires a paid Stripe subscription. New subscribers receive a{' '}
+            <strong className="text-white">7-day free trial</strong> with a card on file, then{' '}
+            <strong className="text-white">$20 USD per month</strong> unless canceled. Pricing shown
+            at Checkout controls. Taxes may apply. You authorize Stripe to charge your payment method
+            after the trial. Cancel or manage billing through Stripe (customer portal / receipt
+            emails). Promo codes may be offered at Checkout when available. Failure to pay may
+            suspend access.
           </p>
         </section>
 
@@ -63,15 +78,6 @@ export default function TermsPage() {
         </section>
 
         <section className="space-y-3 text-sm leading-relaxed text-zinc-300">
-          <h2 className="text-lg font-semibold text-white">Billing</h2>
-          <p>
-            Paid subscriptions may be offered later via Stripe. Pricing and plan terms will be shown
-            at checkout when billing is enabled. Until then, access may be complimentary or invite-
-            only at the operator&apos;s discretion.
-          </p>
-        </section>
-
-        <section className="space-y-3 text-sm leading-relaxed text-zinc-300">
           <h2 className="text-lg font-semibold text-white">Acceptable use</h2>
           <p>
             Use ECE only for your own finances (or accounts you are authorized to manage). Do not
@@ -92,13 +98,17 @@ export default function TermsPage() {
           <h2 className="text-lg font-semibold text-white">Changes</h2>
           <p>
             These stub terms may be updated. Continued use after changes means you accept the updated
-            version once a final policy is published.
+            version once posted.
           </p>
         </section>
 
         <p className="text-sm">
           <Link href="/" className="text-indigo-400 hover:text-indigo-300">
             ← Back to app
+          </Link>
+          {' · '}
+          <Link href="/about" className="text-indigo-400 hover:text-indigo-300">
+            About
           </Link>
           {' · '}
           <Link href="/privacy" className="text-indigo-400 hover:text-indigo-300">

@@ -1,6 +1,8 @@
 import { NextResponse } from 'next/server';
 import { createServerSupabaseClient } from '@/lib/supabase-server';
 import { getServiceSupabase } from '@/lib/supabase-admin';
+import { requireActiveSubscription } from '@/lib/auth/require-entitlement';
+import { toErrorResponse } from '@/lib/http/api-error';
 
 export async function POST(req: Request) {
   try {
@@ -10,6 +12,8 @@ export async function POST(req: Request) {
     if (authError || !user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
+
+    await requireActiveSubscription(user);
 
     const { vest_date, shares_vesting, estimated_share_price, target_liability_balance } = await req.json();
     if (!vest_date || !shares_vesting || !estimated_share_price) {
@@ -50,8 +54,7 @@ export async function POST(req: Request) {
         liability_payoff_impact_pct: liabilityPayoffImpactPct,
       }
     });
-  } catch (error: any) {
-    console.error('RSU Ingestion Error:', error);
-    return NextResponse.json({ error: error.message || 'Failed to record RSU tranche.' }, { status: 500 });
+  } catch (error: unknown) {
+    return toErrorResponse(error, 'rse-post');
   }
 }

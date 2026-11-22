@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { requireUser } from '@/lib/auth/require-user';
+import { requireActiveSubscription } from '@/lib/auth/require-entitlement';
 import { toErrorResponse } from '@/lib/http/api-error';
 import { getServiceSupabase } from '@/lib/supabase-admin';
 import { loadUserFinancials } from '@/lib/data/user-financials';
@@ -21,6 +22,7 @@ const RECENT_TX_LIMIT = 500;
 export async function GET() {
   try {
     const user = await requireUser();
+    await requireActiveSubscription(user);
     const financials = await loadUserFinancials(user.id);
     const supabase = getServiceSupabase();
 

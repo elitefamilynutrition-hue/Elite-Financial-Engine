@@ -24,7 +24,7 @@ The Elite Capital Engine is an automated financial telemetry and forensic auditi
 ## 2. FILE & COMPONENT REGISTRY
 
 ### Edge / auth boundary
-* **`proxy.ts`** — Supabase session gate; exempts `/login`, `/privacy`, `/terms`, Plaid + Stripe webhooks.
+* **`proxy.ts`** — Supabase session gate; exempts `/login`, `/privacy`, `/terms`, `/about`, Plaid + Stripe webhooks + cron.
 
 ### Core utilities & security
 * **`lib/supabase.ts`** — Browser/anon client export; `getServiceSupabase()` is a server-only re-export guard (prefer `lib/supabase-admin.ts`).
@@ -34,7 +34,7 @@ The Elite Capital Engine is an automated financial telemetry and forensic auditi
 * **`lib/crypto.ts`** — AES-256-GCM token encrypt/decrypt; **fail-closed** (no silent plaintext fallback).
 * **`lib/stripe.ts`** — Stripe SDK helper (secret key + price id + app URL).
 * **`lib/auth/require-user.ts`** — Session tenant derivation + admin allowlist.
-* **`lib/auth/require-entitlement.ts`** — Active/trialing subscription gate → 402.
+* **`lib/auth/require-entitlement.ts`** / **`lib/billing/subscription.ts`** — Active/trialing gate → 402 for product APIs + dashboard paywall.
 * **`lib/http/api-error.ts`** / **`lib/http/rate-limit.ts`** — Typed API errors + in-memory rate limits.
 * **`lib/plaid/classify.ts`** / **`lib/plaid/verify-webhook.ts`** — Deterministic PFC classify; JWT webhook verify.
 * **`lib/data/user-financials.ts`** — Shared tenant financial load for dashboard aggregates.
@@ -58,7 +58,7 @@ The Elite Capital Engine is an automated financial telemetry and forensic auditi
 ### Application pages
 * **`app/page.tsx`** — Dashboard / Command Center orchestrator.
 * **`app/login/page.tsx`** — Auth + invite-gated signup.
-* **`app/privacy/page.tsx`** / **`app/terms/page.tsx`** — Legal stubs (not counsel-reviewed).
+* **`app/privacy/page.tsx`** / **`app/terms/page.tsx`** / **`app/about/page.tsx`** — Legal stubs + About hub (not counsel-reviewed).
 
 ### API routes — Active
 * **`app/api/profile/route.ts`** — Profile GET/POST.
@@ -107,7 +107,13 @@ Core Plaid link/sync, telemetry UI, forensic audit, baselines/snapshots (now at 
 * **[x] 6.3** Vercel Cron nightly sync + `historical_snapshots` (`/api/cron/nightly`, `CRON_SECRET`, `vercel.json` `0 12 * * *` UTC). Local stays manual Sync + Stamp Snapshot.
 
 ### Week 1–3 SaaS hardening (AGENT_BRIEFS) — largely COMPLETE in code
-Invite gate, hardcode scrub, snapshot unify, classify-in-sync, cursor default, dashboard aggregates, rate limits, Stripe checkout + webhook + Gemini entitlement (402), privacy/terms + export/delete, ECE branding. **Live Stripe Product/Price/webhook go-live deferred** until pricing and public URL are final.
+Invite gate, hardcode scrub, snapshot unify, classify-in-sync, cursor default, dashboard aggregates, rate limits, Stripe checkout + webhook, privacy/terms/about + export/delete, ECE branding.
+
+### Stripe billing (test) — SHIPPED
+* Checkout: 7-day trial → $20/mo; promo codes enabled at Checkout.
+* Entitlement: `trialing|active` gates dashboard + product APIs (paywall CTA when inactive).
+* Webhook updates `subscription_status` / Stripe IDs on profile.
+* **Ops:** Vercel Authentication must stay **off** on Production so Stripe webhooks and cron are not `401 Protected`. Live `sk_live` still deferred.
 
 ### Week 4 differentiation — SHIPPED (affiliate skipped)
 * Account exclusion (`exclude_from_net_worth`) + Balance Sheet checkbox.
@@ -124,7 +130,7 @@ Invite gate, hardcode scrub, snapshot unify, classify-in-sync, cursor default, d
 Copy `.env.example` → `.env.local` and fill values (never commit secrets).
 
 Required / common keys:
-`NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`, `PLAID_CLIENT_ID`, `PLAID_SECRET`, `PLAID_ENV`, `PLAID_WEBHOOK_URL`, `GEMINI_API_KEY`, `ENCRYPTION_KEY`, `NEXT_PUBLIC_INVITE_CODE`, `ADMIN_EMAILS`, `NEXT_PUBLIC_APP_URL`, `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, `STRIPE_PRICE_ID` (Stripe optional until go-live), `SENTRY_DSN` + `NEXT_PUBLIC_SENTRY_DSN` (omit to disable), `CRON_SECRET` (Phase 6.3; Vercel Cron Bearer).
+`NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`, `PLAID_CLIENT_ID`, `PLAID_SECRET`, `PLAID_ENV`, `PLAID_WEBHOOK_URL`, `GEMINI_API_KEY`, `ENCRYPTION_KEY`, `NEXT_PUBLIC_INVITE_CODE`, `ADMIN_EMAILS`, `NEXT_PUBLIC_APP_URL`, `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, `STRIPE_PRICE_ID` (test go-live; live keys deferred), `SENTRY_DSN` + `NEXT_PUBLIC_SENTRY_DSN` (omit to disable), `CRON_SECRET` (Phase 6.3; Vercel Cron Bearer).
 
 ### Dev server
 ```powershell
@@ -134,11 +140,11 @@ Load `http://localhost:3000`.
 
 ### Smoke checks
 1. Sign in (invite code required for signup).
-2. Configure Targets → profile save.
-3. Sync Telemetry → HTTP 200 / balances refresh.
-4. For Gemini audit/chat/vision: set `user_financial_profiles.subscription_status = 'active'` (or complete Stripe checkout when wired).
+2. Inactive subscription → paywall **Start 7-day trial** (Checkout); after webhook, `subscription_status` is `trialing`/`active`.
+3. Configure Targets → profile save.
+4. Sync Telemetry → HTTP 200 / balances refresh.
 5. Run Gemini Audit / Sparring Chat → disclaimer visible; output renders.
-6. `/privacy` and `/terms` reachable without session.
+6. `/about`, `/privacy`, `/terms` reachable without session.
 
 ---
 
@@ -149,3 +155,4 @@ Load `http://localhost:3000`.
 * **Nov 2026 Week 3:** Stripe skeleton + entitlement, legal stubs + export/delete, ECE branding scrub, ledger reconciliation + `.env.example`, Sentry + CI.
 * **Nov 2026 Week 4:** Account exclusion, profile setup/recalculate, savings/leak cards, FI Wealth Matrix; affiliate skipped.
 * **Nov 2026 Phase 6.3:** Nightly Vercel Cron sync + historical snapshots (`CRON_SECRET`).
+* **Nov 2026 Stripe test wrap:** Trial paywall, product-wide entitlement, About/legal refresh; Vercel Auth must stay off for webhooks/cron.

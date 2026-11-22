@@ -315,14 +315,34 @@ P2: Add /privacy and /terms pages (accurate stubs), footer/nav links, and a "Not
 - [x] vercel.json present
 - [x] Committed
 
+### Stripe billing UX wrap — SHIPPED (test mode)
+**Shipped**
+- Product gate: `trialing|active` required for dashboard + product APIs (not only Gemini)
+- Paywall UI: inactive → **Start 7-day trial** Checkout; header Upgrade removed
+- Checkout: `trial_period_days: 7`, `allow_promotion_codes: true`, $20/mo Price
+- `/about` + refreshed `/privacy` + `/terms` (subscription/EULA-style); Settings → Legal; footer links
+- Invite signup unchanged (beta)
+
+**Operator**
+- **Vercel Authentication must stay OFF on Production** — otherwise Stripe webhooks + cron get `401 Protected deployment`
+- Test keys + webhook `whsec` + `STRIPE_PRICE_ID` + `NEXT_PUBLIC_APP_URL` on Vercel; redeploy after secret changes
+- Live `sk_live` / real charges still deferred until ready
+
+**Done when**
+- [x] Paywall + API entitlement
+- [x] Trial checkout copy
+- [x] Legal pages updated
+- [x] Docs reconciled
+
 ### Still open / deferred
 | Item | Status | Notes |
 |------|--------|-------|
 | Phase 6.2b Plaid Production webhook URL cutover | ☐ ops | Code supports `PLAID_ENV=production`; dashboard URL is operator-owned |
-| Stripe go-live (live Product/Price/webhook) | deferred **last** | Skeleton + entitlement already shipped; Upgrade errors expected until keys |
+| Stripe **live** keys / real charges | deferred | Test-mode go-live done; switch to `sk_live` + live Price/webhook when charging for real |
 | Webhook job queue | stretch only | Only if syncs actually time out |
 | GOD MODE / market analysis | deferred | Not ECE public product; education vs advice; private lab charter later |
 | Affiliate CTA | skipped | Disclosure-heavy; prefer no ship |
+| Counsel-reviewed legal | open | Stubs only — not a substitute for lawyer review |
 
 ---
 ## Stretch (Weeks 5–6) — only if needed
@@ -372,6 +392,7 @@ Stop. Do not continue into other issues. Finish only the acceptance criteria alr
 | 4 | 5 Affiliate opt | ☑ skipped |
 | 6 | 2b Plaid prod webhook ops | ☐ |
 | 6 | 3 Nightly cron sync+snapshot | ☑ |
-| — | Stripe go-live | deferred (last) |
+| — | Stripe test billing UX wrap | ☑ |
+| — | Stripe live keys | deferred |
 | — | Webhook job queue | stretch / if timeouts |
 | — | GOD MODE / markets | deferred |

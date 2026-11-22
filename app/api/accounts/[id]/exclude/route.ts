@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { requireUser } from '@/lib/auth/require-user';
+import { requireActiveSubscription } from '@/lib/auth/require-entitlement';
 import { toErrorResponse, ApiError } from '@/lib/http/api-error';
 import { getServiceSupabase } from '@/lib/supabase-admin';
 
@@ -12,6 +13,7 @@ export async function PATCH(
 ) {
   try {
     const user = await requireUser();
+    await requireActiveSubscription(user);
     const { id } = await context.params;
     if (!id) throw ApiError.badRequest('Account id required.');
 
