@@ -57,7 +57,7 @@ The Elite Capital Engine is an automated financial telemetry and forensic auditi
 
 ### Application pages
 * **`app/page.tsx`** — Dashboard / Command Center orchestrator.
-* **`app/login/page.tsx`** — Auth + invite-gated signup.
+* **`app/login/page.tsx`** / **`app/auth/reset-password/page.tsx`** — Invite signup, forgot password, recovery.
 * **`app/privacy/page.tsx`** / **`app/terms/page.tsx`** / **`app/about/page.tsx`** — Legal stubs + About hub (not counsel-reviewed).
 
 ### API routes — Active
@@ -76,7 +76,7 @@ The Elite Capital Engine is an automated financial telemetry and forensic auditi
 * **`app/api/telemetry/rse/route.ts`** — RSE-related telemetry.
 * **`app/api/telemetry/windfalls/route.ts`** — Capital windfalls API (on disk).
 * **`app/api/manual-accounts/route.ts`** — Manual liabilities API (on disk).
-* **`app/api/billing/checkout/route.ts`** / **`app/api/billing/webhook/route.ts`** — Stripe Checkout + signed webhook.
+* **`app/api/billing/checkout/route.ts`** / **`app/api/billing/webhook/route.ts`** / **`app/api/billing/portal/route.ts`** — Stripe Checkout, signed webhook, Customer Portal.
 * **`app/api/account/export/route.ts`** / **`app/api/account/delete/route.ts`** — Session-scoped export/delete.
 * **`app/api/admin/encrypt-existing-tokens/route.ts`** — Admin token encryption sweep.
 
@@ -156,3 +156,4 @@ Load `http://localhost:3000`.
 * **Nov 2026 Week 4:** Account exclusion, profile setup/recalculate, savings/leak cards, FI Wealth Matrix; affiliate skipped.
 * **Nov 2026 Phase 6.3:** Nightly Vercel Cron sync + historical snapshots (`CRON_SECRET`).
 * **Nov 2026 Stripe test wrap:** Trial paywall, product-wide entitlement, About/legal refresh; Vercel Auth must stay off for webhooks/cron.
+* **Nov 2026:** Forgot password + Stripe Customer Portal.

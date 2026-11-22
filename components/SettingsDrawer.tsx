@@ -15,8 +15,28 @@ interface SettingsDrawerProps {
 export default function SettingsDrawer({ isOpen, onClose, onSaved }: SettingsDrawerProps) {
   const [activeTab, setActiveTab] = useState<'architecture' | 'funds' | 'paystub' | 'legal'>('architecture');
   const [loading, setLoading] = useState(false);
+  const [portalLoading, setPortalLoading] = useState(false);
   const [statusMsg, setStatusMsg] = useState<{ text: string; type: 'success' | 'error' } | null>(null);
   const [latestPayDate, setLatestPayDate] = useState<string | null>(null);
+
+  const openBillingPortal = async () => {
+    setPortalLoading(true);
+    setStatusMsg(null);
+    try {
+      const res = await fetch('/api/billing/portal', { method: 'POST' });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || !data.url) {
+        throw new Error(data.error || 'Unable to open billing portal.');
+      }
+      window.location.href = data.url;
+    } catch (err: unknown) {
+      setStatusMsg({
+        text: err instanceof Error ? err.message : 'Unable to open billing portal.',
+        type: 'error',
+      });
+      setPortalLoading(false);
+    }
+  };
 
   // Master Forensic State
   const [profile, setProfile] = useState({
@@ -493,9 +513,17 @@ export default function SettingsDrawer({ isOpen, onClose, onSaved }: SettingsDra
                   </Link>
                 </li>
               </ul>
+              <button
+                type="button"
+                onClick={openBillingPortal}
+                disabled={portalLoading}
+                className="w-full bg-zinc-800 hover:bg-zinc-700 disabled:opacity-50 border border-zinc-700 text-zinc-100 font-semibold py-2.5 px-4 rounded-lg transition text-sm"
+              >
+                {portalLoading ? 'Opening portal…' : 'Manage billing (Stripe)'}
+              </button>
               <p className="text-[11px] text-zinc-500 leading-relaxed">
-                Subscription: 7-day trial, then $20/month via Stripe. Manage or cancel through Stripe
-                customer receipts / portal when available.
+                Subscription: 7-day trial, then $20/month. Cancel or update your card in the Stripe
+                Customer Portal. Enable the portal in Stripe Dashboard if this errors.
               </p>
             </div>
           )}

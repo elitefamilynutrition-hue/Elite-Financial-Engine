@@ -334,6 +334,22 @@ P2: Add /privacy and /terms pages (accurate stubs), footer/nav links, and a "Not
 - [x] Legal pages updated
 - [x] Docs reconciled
 
+### Forgot password + Stripe Customer Portal — SHIPPED
+**Shipped**
+- Login **Forgot password?** → `resetPasswordForEmail` → `/auth/reset-password` (proxy-exempt `/auth/*`)
+- `POST /api/billing/portal` → Stripe Billing Portal session
+- **Manage billing** in dashboard header + Settings → Legal
+
+**Operator**
+- Supabase → Authentication → URL configuration: add `https://YOUR_APP/auth/reset-password` (and localhost) to Redirect URLs
+- Stripe → Settings → Billing → **Customer portal**: enable (cancel / update payment method)
+- Site URL / `NEXT_PUBLIC_APP_URL` must match production host for email links
+
+**Done when**
+- [x] Reset email + new password page
+- [x] Portal API + UI
+- [x] Committed
+
 ### Still open / deferred
 | Item | Status | Notes |
 |------|--------|-------|
@@ -393,6 +409,7 @@ Stop. Do not continue into other issues. Finish only the acceptance criteria alr
 | 6 | 2b Plaid prod webhook ops | ☐ |
 | 6 | 3 Nightly cron sync+snapshot | ☑ |
 | — | Stripe test billing UX wrap | ☑ |
+| — | Forgot password + Customer Portal | ☑ |
 | — | Stripe live keys | deferred |
 | — | Webhook job queue | stretch / if timeouts |
 | — | GOD MODE / markets | deferred |

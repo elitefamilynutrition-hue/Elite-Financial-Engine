@@ -47,6 +47,7 @@ function DashboardContent() {
   const [userId, setUserId] = useState<string>('');
   const [isSnapshotting, setIsSnapshotting] = useState(false);
   const [isUpgrading, setIsUpgrading] = useState(false);
+  const [isOpeningPortal, setIsOpeningPortal] = useState(false);
   const [entitlementChecked, setEntitlementChecked] = useState(false);
   const [hasSubscription, setHasSubscription] = useState(false);
   const [burnBucketId, setBurnBucketId] = useState<CategoryBucketId | null>(null);
@@ -86,6 +87,22 @@ function DashboardContent() {
       console.error('Trial checkout failed:', err);
       alert(err instanceof Error ? err.message : 'Unable to start checkout.');
       setIsUpgrading(false);
+    }
+  };
+
+  const openBillingPortal = async () => {
+    setIsOpeningPortal(true);
+    try {
+      const res = await fetch('/api/billing/portal', { method: 'POST' });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || !data.url) {
+        throw new Error(data.error || 'Unable to open billing portal.');
+      }
+      window.location.href = data.url;
+    } catch (err: unknown) {
+      console.error('Billing portal failed:', err);
+      alert(err instanceof Error ? err.message : 'Unable to open billing portal.');
+      setIsOpeningPortal(false);
     }
   };
 
@@ -416,6 +433,13 @@ function DashboardContent() {
             <p className="text-zinc-400 text-sm">Automated sync and intelligent portfolio telemetry</p>
           </div>
           <div className="flex items-center gap-3 flex-wrap justify-end">
+            <button
+              onClick={openBillingPortal}
+              disabled={isOpeningPortal}
+              className="bg-zinc-950 hover:bg-zinc-800 border border-zinc-700 disabled:opacity-50 text-zinc-400 hover:text-zinc-200 font-semibold py-2.5 px-4 rounded-lg transition text-sm"
+            >
+              {isOpeningPortal ? 'Opening…' : 'Manage billing'}
+            </button>
             <button
               onClick={handleSignOut}
               className="bg-zinc-950 hover:bg-zinc-800 border border-zinc-700 text-zinc-400 hover:text-zinc-200 font-semibold py-2.5 px-4 rounded-lg transition text-sm"
