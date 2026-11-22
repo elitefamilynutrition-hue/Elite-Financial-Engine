@@ -1,6 +1,6 @@
 ﻿'use client';
 
-import { useState, useEffect, Suspense } from 'react';
+import { useState, useEffect, useMemo, Suspense } from 'react';
 import Link from 'next/link';
 import { useSearchParams, useRouter, usePathname } from 'next/navigation';
 import { PlaidLinkButton } from '@/components/PlaidLinkButton';
@@ -12,7 +12,7 @@ import { AuditChatDrawer } from '@/components/AuditChatDrawer';
 import { CategoryBurnDrawer } from '@/components/CategoryBurnDrawer';
 import { AnomalyReviewPanel, type AnomalyItem } from '@/components/AnomalyReviewPanel';
 import DayZeroIntake from '@/components/DayZeroIntake';
-import { supabase } from '@/lib/supabase';
+import { createBrowserSupabaseClient } from '@/lib/supabase-browser';
 import NetWorthTrendChart from '@/components/Dashboard/NetWorthTrendChart'; 
 import CashFlowCreepChart from '@/components/Dashboard/CashFlowCreepChart';
 import WealthMatrixChart, { type FireDashboardPayload } from '@/components/Dashboard/WealthMatrixChart';
@@ -28,6 +28,8 @@ function DashboardContent() {
   const router = useRouter();
   const pathname = usePathname();
   const currentTab = searchParams.get('tab') || 'dashboard';
+  const supabase = useMemo(() => createBrowserSupabaseClient(), []);
+  const billingSuccess = searchParams.get('billing') === 'success';
 
   const setTab = (tab: string) => {
     const params = new URLSearchParams(searchParams);
@@ -50,6 +52,7 @@ function DashboardContent() {
   const [isOpeningPortal, setIsOpeningPortal] = useState(false);
   const [entitlementChecked, setEntitlementChecked] = useState(false);
   const [hasSubscription, setHasSubscription] = useState(false);
+  const [activatingBilling, setActivatingBilling] = useState(false);
   const [burnBucketId, setBurnBucketId] = useState<CategoryBucketId | null>(null);
   const [burnBuckets, setBurnBuckets] = useState<
     { bucketId: CategoryBucketId; label: string; amount: number; dominantIntent: 'survival' | 'creep'; percentage: number }[]
@@ -107,14 +110,23 @@ function DashboardContent() {
   };
 
   useEffect(() => {
-    const checkProfileStatus = async () => {
-      const { data: { session } } = await supabase.auth.getSession();
+    let cancelled = false;
+
+    const checkOnce = async (): Promise<boolean> => {
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+
       if (!session?.user?.id) {
-        setEntitlementChecked(true);
-        return;
+        if (!cancelled) {
+          setHasSubscription(false);
+          setEntitlementChecked(true);
+          setActivatingBilling(false);
+        }
+        return false;
       }
 
-      setUserId(session.user.id);
+      if (!cancelled) setUserId(session.user.id);
 
       const { data, error } = await supabase
         .from('user_financial_profiles')
@@ -123,15 +135,53 @@ function DashboardContent() {
         .maybeSingle();
 
       const entitled = isSubscriptionActive(data?.subscription_status);
-      setHasSubscription(entitled);
-      setEntitlementChecked(true);
-
-      if (entitled && (error || !data?.id)) {
-        setNeedsOnboarding(true);
+      if (!cancelled) {
+        setHasSubscription(entitled);
+        setEntitlementChecked(true);
+        if (entitled && (error || !data?.id)) {
+          setNeedsOnboarding(true);
+        }
       }
+      return entitled;
     };
-    checkProfileStatus();
-  }, [searchParams]);
+
+    const run = async () => {
+      const entitled = await checkOnce();
+      if (cancelled) return;
+
+      if (entitled) {
+        setActivatingBilling(false);
+        if (billingSuccess) {
+          router.replace(pathname);
+        }
+        return;
+      }
+
+      if (!billingSuccess) {
+        setActivatingBilling(false);
+        return;
+      }
+
+      // Webhook may lag Checkout redirect — poll briefly for trialing/active.
+      setActivatingBilling(true);
+      for (let i = 0; i < 12 && !cancelled; i++) {
+        await new Promise((r) => setTimeout(r, 1500));
+        const ok = await checkOnce();
+        if (cancelled) return;
+        if (ok) {
+          setActivatingBilling(false);
+          router.replace(pathname);
+          return;
+        }
+      }
+      setActivatingBilling(false);
+    };
+
+    void run();
+    return () => {
+      cancelled = true;
+    };
+  }, [supabase, searchParams, billingSuccess, pathname, router]);
 
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editValue, setEditValue] = useState('');
@@ -354,10 +404,13 @@ function DashboardContent() {
     </div>
   );
 
-  if (!entitlementChecked) {
+  if (!entitlementChecked || activatingBilling) {
     return (
-      <main className="min-h-screen bg-zinc-950 flex items-center justify-center text-zinc-500">
-        Checking subscription…
+      <main className="min-h-screen bg-zinc-950 flex flex-col items-center justify-center gap-2 text-zinc-500">
+        <p>{activatingBilling ? 'Activating subscription…' : 'Checking subscription…'}</p>
+        {activatingBilling ? (
+          <p className="text-xs text-zinc-600">Waiting for Stripe webhook — usually a few seconds.</p>
+        ) : null}
       </main>
     );
   }
@@ -374,6 +427,12 @@ function DashboardContent() {
               <span className="text-zinc-200">7 days free</span>, then{' '}
               <span className="text-zinc-200">$20/month</span>. Cancel anytime in Stripe.
             </p>
+            {billingSuccess ? (
+              <p className="text-sm text-amber-400/90">
+                Checkout finished, but entitlement is not active yet. Wait a moment and refresh, or
+                contact support if this persists.
+              </p>
+            ) : null}
           </div>
           <p className="text-xs text-zinc-500 leading-relaxed">
             Not financial, tax, or investment advice. By continuing you agree to the{' '}
