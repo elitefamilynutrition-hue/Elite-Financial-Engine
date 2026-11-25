@@ -51,6 +51,11 @@ export default function AboutPage() {
           <h2 className="text-lg font-semibold text-white">Legal</h2>
           <ul className="list-disc pl-5 space-y-1">
             <li>
+              <Link href="/legal" className="text-indigo-400 hover:text-indigo-300">
+                Legal hub
+              </Link>
+            </li>
+            <li>
               <Link href="/privacy" className="text-indigo-400 hover:text-indigo-300">
                 Privacy
               </Link>
@@ -61,21 +66,12 @@ export default function AboutPage() {
               </Link>{' '}
               (web SaaS terms; EULA-style license + billing are included there)
             </li>
+            <li>
+              <Link href="/contact" className="text-indigo-400 hover:text-indigo-300">
+                Contact
+              </Link>
+            </li>
           </ul>
-        </section>
-
-        <section className="space-y-3 text-sm leading-relaxed text-zinc-300">
-          <h2 className="text-lg font-semibold text-white">Contact</h2>
-          <p>
-            For privacy or account questions during beta, email{' '}
-            <a
-              href="mailto:solito.emanuele@gmail.com"
-              className="text-indigo-400 hover:text-indigo-300"
-            >
-              solito.emanuele@gmail.com
-            </a>
-            .
-          </p>
         </section>
 
         <p className="text-sm">

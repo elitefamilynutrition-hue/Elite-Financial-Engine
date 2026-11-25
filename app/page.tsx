@@ -22,6 +22,7 @@ import { formatCategoryLabel } from '@/lib/format/category-label';
 import type { CategoryBucketId } from '@/lib/analytics/category-buckets';
 import { computeLiveNetWorth } from '@/lib/analytics/net-worth';
 import { isSubscriptionActive } from '@/lib/billing/subscription';
+import { LegalFooter } from '@/components/LegalFooter';
 
 function DashboardContent() {
   const searchParams = useSearchParams();
@@ -453,14 +454,10 @@ function DashboardContent() {
           </div>
           <p className="text-xs text-zinc-500 leading-relaxed">
             Not financial, tax, or investment advice. By continuing you agree to the{' '}
-            <Link href="/terms" className="text-indigo-400 hover:underline">
-              Terms
+            <Link href="/legal" className="text-indigo-400 hover:underline">
+              Legal
             </Link>{' '}
-            and{' '}
-            <Link href="/privacy" className="text-indigo-400 hover:underline">
-              Privacy
-            </Link>{' '}
-            stubs.
+            stubs (Terms &amp; Privacy).
           </p>
           <div className="flex flex-col sm:flex-row gap-3">
             <button
@@ -477,17 +474,7 @@ function DashboardContent() {
               Sign out
             </button>
           </div>
-          <nav className="flex gap-4 text-xs text-zinc-500 pt-2">
-            <Link href="/about" className="hover:text-zinc-300 underline-offset-2 hover:underline">
-              About
-            </Link>
-            <Link href="/privacy" className="hover:text-zinc-300 underline-offset-2 hover:underline">
-              Privacy
-            </Link>
-            <Link href="/terms" className="hover:text-zinc-300 underline-offset-2 hover:underline">
-              Terms
-            </Link>
-          </nav>
+          <LegalFooter className="pt-2" />
         </div>
       </main>
     );
@@ -869,17 +856,7 @@ function DashboardContent() {
 
         <footer className="border-t border-zinc-800 pt-6 pb-2 flex flex-wrap items-center justify-between gap-3 text-xs text-zinc-500">
           <span>Elite Capital Engine · Not financial advice</span>
-          <nav className="flex gap-4">
-            <Link href="/about" className="hover:text-zinc-300 underline-offset-2 hover:underline">
-              About
-            </Link>
-            <Link href="/privacy" className="hover:text-zinc-300 underline-offset-2 hover:underline">
-              Privacy
-            </Link>
-            <Link href="/terms" className="hover:text-zinc-300 underline-offset-2 hover:underline">
-              Terms
-            </Link>
-          </nav>
+          <LegalFooter />
         </footer>
       </div>
 

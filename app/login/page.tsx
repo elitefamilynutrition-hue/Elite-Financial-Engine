@@ -233,16 +233,16 @@ export default function LoginPage() {
         )}
 
         <p className="text-center text-xs text-zinc-500">
+          <Link href="/legal" className="hover:text-zinc-300 underline-offset-2 hover:underline">
+            Legal
+          </Link>
+          {' · '}
           <Link href="/about" className="hover:text-zinc-300 underline-offset-2 hover:underline">
             About
           </Link>
           {' · '}
-          <Link href="/privacy" className="hover:text-zinc-300 underline-offset-2 hover:underline">
-            Privacy
-          </Link>
-          {' · '}
-          <Link href="/terms" className="hover:text-zinc-300 underline-offset-2 hover:underline">
-            Terms
+          <Link href="/contact" className="hover:text-zinc-300 underline-offset-2 hover:underline">
+            Contact
           </Link>
         </p>
       </div>

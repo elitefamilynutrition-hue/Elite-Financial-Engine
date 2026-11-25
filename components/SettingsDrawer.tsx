@@ -559,6 +559,11 @@ export default function SettingsDrawer({ isOpen, onClose, onSaved }: SettingsDra
               </div>
               <ul className="space-y-2 text-zinc-300">
                 <li>
+                  <Link href="/legal" onClick={onClose} className="text-indigo-400 hover:text-indigo-300">
+                    Legal hub
+                  </Link>
+                </li>
+                <li>
                   <Link href="/about" onClick={onClose} className="text-indigo-400 hover:text-indigo-300">
                     About Elite Capital Engine
                   </Link>
@@ -571,6 +576,11 @@ export default function SettingsDrawer({ isOpen, onClose, onSaved }: SettingsDra
                 <li>
                   <Link href="/terms" onClick={onClose} className="text-indigo-400 hover:text-indigo-300">
                     Terms of use (incl. subscription / EULA-style terms)
+                  </Link>
+                </li>
+                <li>
+                  <Link href="/contact" onClick={onClose} className="text-indigo-400 hover:text-indigo-300">
+                    Contact
                   </Link>
                 </li>
               </ul>
