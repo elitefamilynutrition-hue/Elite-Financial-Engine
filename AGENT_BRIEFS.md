@@ -364,6 +364,27 @@ P2: Add /privacy and /terms pages (accurate stubs), footer/nav links, and a "Not
 - [x] Vitest + `npm test` in CI
 - [x] Committed
 
+### Operator Lab program (private) — SHIPPED in code
+> Public sellable surface stays ECE telemetry. Lab is admin-only under `/lab` when `ENABLE_LAB=true` + `ADMIN_EMAILS`.
+
+| Slice | Status | Notes |
+|-------|--------|-------|
+| `/legal` + `/contact` hub | ☑ | Session-exempt; footers prefer hub |
+| Lab gate | ☑ | `lib/auth/admin.ts`, `/api/lab/access`, dashboard Lab link |
+| GOD MODE | ☑ | `/lab/god-mode` static education — not advice, no trading |
+| MFA TOTP UI | ☑ | `/lab/security`; `ENFORCE_MFA_FOR_LAB` for Lab APIs |
+| Household | ☑ | Migration + `/api/household` + `/lab/household` UI |
+| RAG tax | ☑ | `content/rag-tax/*` + `/lab/rag-tax` when `ENABLE_RAG_TAX=true` |
+| Affiliate CTA | flag only | `ENABLE_AFFILIATE_CTA` default false — no live CTA |
+| Webhook job queue | **skipped** | No evidence of sync timeouts; keep stretch until proven |
+
+**Operator apply**
+- `ENABLE_LAB=true`, `ADMIN_EMAILS=you@…` on Vercel / `.env.local`
+- Optional: `ENABLE_RAG_TAX=true`, `ENFORCE_MFA_FOR_LAB=true`
+- Apply `20261126000000_households.sql` in Supabase
+- Supabase Auth → enable MFA (TOTP) before Lab security enroll
+- Before public Stripe live: set `ENABLE_LAB=false` (or omit) for fail-closed
+
 ### Still open / deferred
 | Item | Status | Notes |
 |------|--------|-------|
@@ -371,20 +392,18 @@ P2: Add /privacy and /terms pages (accurate stubs), footer/nav links, and a "Not
 | Phase 6.2b Plaid Production webhook URL cutover | ☐ ops | Code supports `PLAID_ENV=production`; dashboard URL is operator-owned |
 | Stripe **live** keys / real charges | deferred (launch-last) | Test-mode done; `sk_live` + live Price/webhook only before public charges |
 | Apply `plaid_webhook_receipts` migration | ☐ ops | SQL authored; run in Supabase |
-| Webhook job queue | stretch only | Only if syncs actually time out |
-| GOD MODE / market analysis | deferred | Not ECE public product; education vs advice; private lab charter later |
-| Affiliate CTA | skipped | Disclosure-heavy; prefer no ship |
-| Counsel-reviewed legal | open | Stubs only — not a substitute for lawyer review |
+| Apply `households` migration | ☐ ops | `20261126000000_households.sql` |
+| Webhook job queue | skipped for now | Revisit only if Plaid webhook/sync timeouts appear |
+| Affiliate live CTA | skipped | Flag exists; need counsel disclosure copy |
+| Counsel-reviewed legal | open | Stubs + `/legal` hub — not a substitute for lawyer review |
 
 ---
 ## Stretch (Weeks 5–6) — only if needed
-Use **Ask** for design; Agent only for a single agreed slice.
-| Topic | Ask focus | Agent only if… |
-|-------|-----------|----------------|
-| Webhook job queue | timeout evidence exists | syncs actually timing out |
-| Household/B2B orgs | selling advisors | committed GTM |
-| MFA | Supabase settings | compliance asks |
-| RAG tax (8.4) | ROI doubtful | post-revenue |
+| Topic | Status |
+|-------|--------|
+| Webhook job queue | skipped until timeout evidence |
+| Household UI beyond Lab | optional later for sellable multi-user |
+| Affiliate CTA | counsel copy required |
 ---
 ## Emergency token-save prompts
 **Scope check (Ask)**
@@ -427,6 +446,8 @@ Stop. Do not continue into other issues. Finish only the acceptance criteria alr
 | — | Stripe test billing UX wrap | ☑ |
 | — | Forgot password + Customer Portal | ☑ |
 | — | Product hygiene (tax/plaid/export/vitest/receipts) | ☑ |
+| — | Legal hub + Contact | ☑ |
+| — | Operator Lab + GOD MODE + MFA + household + RAG | ☑ (lab-gated) |
 | — | Stripe live keys | deferred (launch-last) |
-| — | Webhook job queue | stretch / if timeouts |
-| — | GOD MODE / markets | deferred |
+| — | Webhook job queue | skipped until timeouts |
+| — | Affiliate live CTA | flag only / counsel |

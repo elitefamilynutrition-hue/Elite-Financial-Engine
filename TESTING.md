@@ -52,9 +52,21 @@ npm test
 
 Pure libs only (tax brackets, intent, category buckets, savings leak, classify, rate limit). No network.
 
+## Operator Lab
+
+1. Set `ADMIN_EMAILS` to your login email and `ENABLE_LAB=true` (local + Vercel).
+2. Reload dashboard → **Lab** link appears → `/lab`.
+3. GOD MODE loads static education copy (no trading).
+4. MFA: enable TOTP in Supabase Auth, then `/lab/security` enroll + verify.
+5. Optional `ENFORCE_MFA_FOR_LAB=true` → Lab APIs return 403 until AAL2.
+6. Household: apply `20261126000000_households.sql`, then create/join under `/lab/household`.
+7. RAG: `ENABLE_RAG_TAX=true`, ask a question under `/lab/rag-tax`.
+8. Before public invites / Stripe live: `ENABLE_LAB=false` (fail-closed).
+
 ## Still operator-owned (not Agent)
 
 - Plaid **Production** cutover (`PLAID_ENV=production` + dashboard webhook URL)
 - Stripe **live** keys / live Price / live webhook
 - Counsel review of Privacy / Terms
 - Real dogfooding with personal banks
+- Apply household (+ prior) SQL migrations in Supabase

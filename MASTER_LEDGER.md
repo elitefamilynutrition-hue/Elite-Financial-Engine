@@ -57,7 +57,8 @@ The Elite Capital Engine is an automated financial telemetry and forensic auditi
 ### Application pages
 * **`app/page.tsx`** — Dashboard / Command Center orchestrator.
 * **`app/login/page.tsx`** / **`app/auth/reset-password/page.tsx`** — Invite signup, forgot password, recovery.
-* **`app/privacy/page.tsx`** / **`app/terms/page.tsx`** / **`app/about/page.tsx`** — Legal stubs + About hub (not counsel-reviewed).
+* **`app/legal/page.tsx`** / **`app/contact/page.tsx`** / **`app/privacy/page.tsx`** / **`app/terms/page.tsx`** / **`app/about/page.tsx`** — Legal hub + stubs (not counsel-reviewed).
+* **`app/lab/*`** — Admin Operator Lab (GOD MODE, MFA, household, RAG tax).
 
 ### API routes — Active
 * **`app/api/profile/route.ts`** — Legacy profile GET (entitled); POST retired → setup/recalculate.
@@ -130,7 +131,12 @@ Invite gate, hardcode scrub, snapshot unify, classify-in-sync, cursor default, d
 Copy `.env.example` → `.env.local` and fill values (never commit secrets).
 
 Required / common keys:
-`NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`, `PLAID_CLIENT_ID`, `PLAID_SECRET`, `PLAID_ENV`, `PLAID_WEBHOOK_URL`, `GEMINI_API_KEY`, `ENCRYPTION_KEY`, `NEXT_PUBLIC_INVITE_CODE`, `ADMIN_EMAILS`, `NEXT_PUBLIC_APP_URL`, `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, `STRIPE_PRICE_ID` (test go-live; live keys deferred), `SENTRY_DSN` + `NEXT_PUBLIC_SENTRY_DSN` (omit to disable), `CRON_SECRET` (Phase 6.3; Vercel Cron Bearer).
+`NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`, `PLAID_CLIENT_ID`, `PLAID_SECRET`, `PLAID_ENV`, `PLAID_WEBHOOK_URL`, `GEMINI_API_KEY`, `ENCRYPTION_KEY`, `NEXT_PUBLIC_INVITE_CODE`, `ADMIN_EMAILS`, `NEXT_PUBLIC_APP_URL`, `NEXT_PUBLIC_CONTACT_EMAIL` (optional), `ENABLE_LAB`, `ENFORCE_MFA_FOR_LAB`, `ENABLE_RAG_TAX`, `ENABLE_AFFILIATE_CTA` (keep false), `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, `STRIPE_PRICE_ID` (test go-live; live keys deferred), `SENTRY_DSN` + `NEXT_PUBLIC_SENTRY_DSN` (omit to disable), `CRON_SECRET` (Phase 6.3; Vercel Cron Bearer).
+
+### Operator Lab (private)
+* **`/lab`** — `ENABLE_LAB=true` + `ADMIN_EMAILS`; 404 otherwise.
+* GOD MODE / RAG tax / household UI / MFA enroll under Lab only — not default Command Center.
+* Webhook **job queue** not implemented — no timeout evidence yet.
 
 ### Dev server
 ```powershell
@@ -144,7 +150,8 @@ Load `http://localhost:3000`.
 3. Configure Targets → profile save.
 4. Sync Telemetry → HTTP 200 / balances refresh.
 5. Run Gemini Audit / Sparring Chat → disclaimer visible; output renders.
-6. `/about`, `/privacy`, `/terms` reachable without session.
+6. `/legal`, `/contact`, `/about`, `/privacy`, `/terms` reachable without session.
+7. With `ENABLE_LAB=true` + admin email: dashboard **Lab** link → `/lab` (GOD MODE, MFA, household, RAG).
 
 ---
 
