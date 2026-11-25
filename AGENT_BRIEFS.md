@@ -350,11 +350,27 @@ P2: Add /privacy and /terms pages (accurate stubs), footer/nav links, and a "Not
 - [x] Portal API + UI
 - [x] Committed
 
+### Product hygiene batch (Nov 2025) — Agent
+> Tax brackets single-sourced; Plaid investment Link + sync helper; Legal export/delete UI; browser Supabase client migration; dashboard fetch errors surfaced; vitest + CI; `TESTING.md`; durable `plaid_webhook_receipts`.
+
+**Operator**
+- Apply `supabase/migrations/20261125000000_plaid_webhook_receipts.sql` in Supabase
+- Run Week 1 isolation checklist in `TESTING.md` (still human)
+
+**Done when**
+- [x] `lib/tax/brackets.ts` used by Day Zero / Settings / vision
+- [x] `linkType` honored; investment sync via `lib/plaid/investments.ts`
+- [x] Settings → Legal: export + typed delete; table coverage complete
+- [x] Vitest + `npm test` in CI
+- [x] Committed
+
 ### Still open / deferred
 | Item | Status | Notes |
 |------|--------|-------|
+| Week 1 weekend isolation test | ☐ human | Checklist in `TESTING.md` — no Agent |
 | Phase 6.2b Plaid Production webhook URL cutover | ☐ ops | Code supports `PLAID_ENV=production`; dashboard URL is operator-owned |
-| Stripe **live** keys / real charges | deferred | Test-mode go-live done; switch to `sk_live` + live Price/webhook when charging for real |
+| Stripe **live** keys / real charges | deferred (launch-last) | Test-mode done; `sk_live` + live Price/webhook only before public charges |
+| Apply `plaid_webhook_receipts` migration | ☐ ops | SQL authored; run in Supabase |
 | Webhook job queue | stretch only | Only if syncs actually time out |
 | GOD MODE / market analysis | deferred | Not ECE public product; education vs advice; private lab charter later |
 | Affiliate CTA | skipped | Disclosure-heavy; prefer no ship |
@@ -410,6 +426,7 @@ Stop. Do not continue into other issues. Finish only the acceptance criteria alr
 | 6 | 3 Nightly cron sync+snapshot | ☑ |
 | — | Stripe test billing UX wrap | ☑ |
 | — | Forgot password + Customer Portal | ☑ |
-| — | Stripe live keys | deferred |
+| — | Product hygiene (tax/plaid/export/vitest/receipts) | ☑ |
+| — | Stripe live keys | deferred (launch-last) |
 | — | Webhook job queue | stretch / if timeouts |
 | — | GOD MODE / markets | deferred |

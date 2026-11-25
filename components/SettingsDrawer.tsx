@@ -1,10 +1,10 @@
 'use client';
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import Link from 'next/link';
 import PaystubDropzone from '@/components/PayStubDropzone';
-import { supabase } from '@/lib/supabase';
-import { calculateMarginalTaxBracket } from '@/components/DayZeroIntake';
+import { createBrowserSupabaseClient } from '@/lib/supabase-browser';
+import { calculateMarginalBracket } from '@/lib/tax/brackets';
 
 interface SettingsDrawerProps {
   isOpen: boolean;
@@ -13,9 +13,13 @@ interface SettingsDrawerProps {
 }
 
 export default function SettingsDrawer({ isOpen, onClose, onSaved }: SettingsDrawerProps) {
+  const supabase = useMemo(() => createBrowserSupabaseClient(), []);
   const [activeTab, setActiveTab] = useState<'architecture' | 'funds' | 'paystub' | 'legal'>('architecture');
   const [loading, setLoading] = useState(false);
   const [portalLoading, setPortalLoading] = useState(false);
+  const [exportLoading, setExportLoading] = useState(false);
+  const [deleteLoading, setDeleteLoading] = useState(false);
+  const [deleteConfirm, setDeleteConfirm] = useState('');
   const [statusMsg, setStatusMsg] = useState<{ text: string; type: 'success' | 'error' } | null>(null);
   const [latestPayDate, setLatestPayDate] = useState<string | null>(null);
 
@@ -35,6 +39,63 @@ export default function SettingsDrawer({ isOpen, onClose, onSaved }: SettingsDra
         type: 'error',
       });
       setPortalLoading(false);
+    }
+  };
+
+  const exportAccountData = async () => {
+    setExportLoading(true);
+    setStatusMsg(null);
+    try {
+      const res = await fetch('/api/account/export');
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error(data.error || `Export failed (${res.status})`);
+      }
+      const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `ece-export-${new Date().toISOString().slice(0, 10)}.json`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+      setStatusMsg({ text: 'Data export downloaded.', type: 'success' });
+    } catch (err: unknown) {
+      setStatusMsg({
+        text: err instanceof Error ? err.message : 'Export failed.',
+        type: 'error',
+      });
+    } finally {
+      setExportLoading(false);
+    }
+  };
+
+  const deleteAccountData = async () => {
+    if (deleteConfirm.trim().toUpperCase() !== 'DELETE') {
+      setStatusMsg({ text: 'Type DELETE to confirm permanent account wipe.', type: 'error' });
+      return;
+    }
+    setDeleteLoading(true);
+    setStatusMsg(null);
+    try {
+      const res = await fetch('/api/account/delete', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ confirm: true }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error(data.error || `Delete failed (${res.status})`);
+      }
+      await supabase.auth.signOut();
+      window.location.href = '/login';
+    } catch (err: unknown) {
+      setStatusMsg({
+        text: err instanceof Error ? err.message : 'Delete failed.',
+        type: 'error',
+      });
+      setDeleteLoading(false);
     }
   };
 
@@ -124,7 +185,7 @@ export default function SettingsDrawer({ isOpen, onClose, onSaved }: SettingsDra
     } catch (error) {
       console.error('Failed to fetch settings data:', error);
     }
-  }, []);
+  }, [supabase]);
 
   const checkPaystubCompliance = useCallback(async () => {
     try {
@@ -145,7 +206,7 @@ export default function SettingsDrawer({ isOpen, onClose, onSaved }: SettingsDra
     } catch (err) {
       console.error('Failed to check paystub compliance:', err);
     }
-  }, []);
+  }, [supabase]);
 
   useEffect(() => {
     if (isOpen) {
@@ -162,11 +223,11 @@ export default function SettingsDrawer({ isOpen, onClose, onSaved }: SettingsDra
       const { data: { session } } = await supabase.auth.getSession();
       if (!session?.user?.id) throw new Error('No active session');
 
-      const dynamicBracket = calculateMarginalTaxBracket(
-        profile.annual_gross_salary,
-        profile.annual_bonus_target,
-        profile.relationship_status
-      );
+      const dynamicBracket = calculateMarginalBracket({
+        annualGross: profile.annual_gross_salary,
+        annualBonus: profile.annual_bonus_target,
+        filingStatus: profile.relationship_status,
+      });
 
       const res = await fetch('/api/profile/recalculate', {
         method: 'POST',
@@ -525,6 +586,40 @@ export default function SettingsDrawer({ isOpen, onClose, onSaved }: SettingsDra
                 Subscription: 7-day trial, then $20/month. Cancel or update your card in the Stripe
                 Customer Portal. Enable the portal in Stripe Dashboard if this errors.
               </p>
+
+              <div className="border-t border-zinc-800 pt-4 space-y-3">
+                <p className="text-xs font-semibold text-zinc-400 uppercase tracking-wide">Your data</p>
+                <button
+                  type="button"
+                  onClick={exportAccountData}
+                  disabled={exportLoading}
+                  className="w-full bg-zinc-800 hover:bg-zinc-700 disabled:opacity-50 border border-zinc-700 text-zinc-100 font-semibold py-2.5 px-4 rounded-lg transition text-sm"
+                >
+                  {exportLoading ? 'Preparing export…' : 'Download my data (JSON)'}
+                </button>
+                <div className="space-y-2 rounded-lg border border-rose-900/40 bg-rose-950/20 p-3">
+                  <p className="text-xs text-rose-200/90 leading-relaxed">
+                    Permanently delete your account, linked banks (best-effort revoke), and all
+                    tenant data. This cannot be undone.
+                  </p>
+                  <input
+                    type="text"
+                    value={deleteConfirm}
+                    onChange={(e) => setDeleteConfirm(e.target.value)}
+                    placeholder='Type DELETE to confirm'
+                    className="w-full bg-zinc-950 border border-zinc-700 rounded-md px-3 py-2 text-sm text-zinc-100 placeholder:text-zinc-600"
+                    autoComplete="off"
+                  />
+                  <button
+                    type="button"
+                    onClick={deleteAccountData}
+                    disabled={deleteLoading || deleteConfirm.trim().toUpperCase() !== 'DELETE'}
+                    className="w-full bg-rose-700 hover:bg-rose-600 disabled:opacity-40 text-white font-semibold py-2.5 px-4 rounded-lg transition text-sm"
+                  >
+                    {deleteLoading ? 'Deleting…' : 'Delete my account'}
+                  </button>
+                </div>
+              </div>
             </div>
           )}
         </div>

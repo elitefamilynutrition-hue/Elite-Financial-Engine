@@ -27,6 +27,10 @@ export async function GET() {
       windfallsRes,
       plaidRes,
       investTxRes,
+      sinkingRes,
+      liquidityRes,
+      manualTxRes,
+      rulesRes,
     ] = await Promise.all([
       supabase.from('user_financial_profiles').select('*').eq('user_id', userId).maybeSingle(),
       supabase.from('financial_accounts').select('*').eq('user_id', userId),
@@ -56,6 +60,15 @@ export async function GET() {
         .select('id, user_id, item_id, institution_id, institution_name, next_cursor, created_at, updated_at')
         .eq('user_id', userId),
       supabase.from('investment_transactions').select('*').eq('user_id', userId).limit(TX_LIMIT),
+      supabase.from('sinking_funds').select('*').eq('user_id', userId),
+      supabase.from('future_liquidity_events').select('*').eq('user_id', userId),
+      supabase
+        .from('manual_account_transactions')
+        .select('*')
+        .eq('user_id', userId)
+        .order('transaction_date', { ascending: false })
+        .limit(TX_LIMIT),
+      supabase.from('user_custom_categorization_rules').select('*').eq('user_id', userId),
     ]);
 
     return NextResponse.json({
@@ -66,6 +79,7 @@ export async function GET() {
       limits: {
         transactions: TX_LIMIT,
         investment_transactions: TX_LIMIT,
+        manual_account_transactions: TX_LIMIT,
         snapshots: SNAPSHOT_LIMIT,
       },
       data: {
@@ -79,6 +93,10 @@ export async function GET() {
         paystub_records: paystubRes.data || [],
         capital_windfalls: windfallsRes.data || [],
         plaid_items: plaidRes.data || [],
+        sinking_funds: sinkingRes.data || [],
+        future_liquidity_events: liquidityRes.data || [],
+        manual_account_transactions: manualTxRes.data || [],
+        user_custom_categorization_rules: rulesRes.data || [],
       },
     });
   } catch (error) {

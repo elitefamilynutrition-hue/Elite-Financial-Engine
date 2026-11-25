@@ -1,7 +1,8 @@
 "use client";
 
-import React, { useState, useEffect } from 'react';
-import { supabase } from '@/lib/supabase';
+import React, { useMemo, useState, useEffect } from 'react';
+import { createBrowserSupabaseClient } from '@/lib/supabase-browser';
+import { calculateMarginalBracket } from '@/lib/tax/brackets';
 import PaystubDropzone from '@/components/PayStubDropzone';
 
 const Tooltip = ({ text }: { text: string }) => (
@@ -13,41 +14,8 @@ const Tooltip = ({ text }: { text: string }) => (
   </div>
 );
 
-export function calculateMarginalTaxBracket(
-  grossSalary: number,
-  bonusTarget: number,
-  filingStatus: string
-): number {
-  const status = (filingStatus || 'Single').toLowerCase();
-  let standardDeduction = 15000;
-  if (status.includes('joint') || status === 'married') {
-    standardDeduction = 30000;
-  } else if (status.includes('head')) {
-    standardDeduction = 22500;
-  }
-
-  const taxableIncome = Math.max(0, grossSalary + bonusTarget - standardDeduction);
-
-  if (status.includes('joint') || status === 'married') {
-    if (taxableIncome > 751600) return 37;
-    if (taxableIncome > 501050) return 35;
-    if (taxableIncome > 394600) return 32;
-    if (taxableIncome > 206700) return 24;
-    if (taxableIncome > 96950) return 22;
-    if (taxableIncome > 23850) return 12;
-    return 10;
-  } else {
-    if (taxableIncome > 626350) return 37;
-    if (taxableIncome > 250525) return 35;
-    if (taxableIncome > 197300) return 32;
-    if (taxableIncome > 103350) return 24;
-    if (taxableIncome > 48475) return 22;
-    if (taxableIncome > 11925) return 12;
-    return 10;
-  }
-}
-
 export default function DayZeroIntake({ onComplete }: { onComplete: () => void }) {
+  const supabase = useMemo(() => createBrowserSupabaseClient(), []);
   const [step, setStep] = useState(1);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
@@ -139,11 +107,11 @@ export default function DayZeroIntake({ onComplete }: { onComplete: () => void }
     setFormData(prev => ({ ...prev, [key]: value }));
   };
 
-  const estimatedMarginalBracket = calculateMarginalTaxBracket(
-     parseFloat(formData.base_salary as string) || 0,
-    parseFloat(formData.annual_bonus_target as string) || 0,
-    formData.relationship_status
-  );
+  const estimatedMarginalBracket = calculateMarginalBracket({
+    annualGross: parseFloat(formData.base_salary as string) || 0,
+    annualBonus: parseFloat(formData.annual_bonus_target as string) || 0,
+    filingStatus: formData.relationship_status,
+  });
 
   const swrNum = parseFloat(formData.safe_withdrawal_rate) || 4.0;
   const fireMultiplier = swrNum > 0 ? (100 / swrNum).toFixed(1) : '25.0';

@@ -5,7 +5,7 @@ import { decryptToken } from '@/lib/crypto';
 import { syncAccountsForItem } from '@/lib/plaid/sync-accounts';
 import { classifyPlaidTransaction, toCategoryString } from '@/lib/plaid/classify';
 import {
-  claimWebhookDelivery,
+  claimWebhookDeliveryDurable,
   getWebhookIdempotencyKey,
   verifyPlaidWebhook,
   WebhookVerificationError,
@@ -26,17 +26,29 @@ export async function POST(req: Request) {
   }
 
   const idempotencyKey = getWebhookIdempotencyKey(rawBody, requestBodySha256);
-  if (!claimWebhookDelivery(idempotencyKey)) {
-    console.log('[Plaid Webhook] Duplicate delivery within 24h window — ACK without re-sync');
+
+  let payload: {
+    webhook_type?: string;
+    webhook_code?: string;
+    item_id?: string;
+  };
+  try {
+    payload = JSON.parse(rawBody) as typeof payload;
+  } catch {
+    return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 });
+  }
+
+  const claimed = await claimWebhookDeliveryDurable(idempotencyKey, {
+    itemId: payload.item_id,
+    webhookType: payload.webhook_type,
+    webhookCode: payload.webhook_code,
+  });
+  if (!claimed) {
+    console.log('[Plaid Webhook] Duplicate delivery — ACK without re-sync');
     return NextResponse.json({ status: 'ACKNOWLEDGED', duplicate: true });
   }
 
   try {
-    const payload = JSON.parse(rawBody) as {
-      webhook_type?: string;
-      webhook_code?: string;
-      item_id?: string;
-    };
     const { webhook_type, webhook_code, item_id } = payload;
 
     if (!item_id) {

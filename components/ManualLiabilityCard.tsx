@@ -1,7 +1,7 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import { supabase } from '@/lib/supabase';
+import { useState, useEffect, useMemo } from 'react';
+import { createBrowserSupabaseClient } from '@/lib/supabase-browser';
 
 interface ManualAccount {
   id: string;
@@ -14,6 +14,7 @@ interface ManualAccount {
 }
 
 export function ManualLiabilityCard() {
+  const supabase = useMemo(() => createBrowserSupabaseClient(), []);
   const [accounts, setAccounts] = useState<ManualAccount[]>([]);
   const [selectedAccount, setSelectedAccount] = useState<ManualAccount | null>(null);
   

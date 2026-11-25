@@ -1,10 +1,11 @@
 'use client';
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { ResponsiveContainer, AreaChart, Area, XAxis, YAxis, Tooltip, CartesianGrid } from 'recharts';
-import { supabase } from '@/lib/supabase';
+import { createBrowserSupabaseClient } from '@/lib/supabase-browser';
 
 export default function NetWorthTrendChart({ userId }: { userId: string }) {
+  const supabase = useMemo(() => createBrowserSupabaseClient(), []);
   const [data, setData] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -39,7 +40,7 @@ export default function NetWorthTrendChart({ userId }: { userId: string }) {
     if (userId) {
       fetchSnapshots();
     }
-  }, [userId]);
+  }, [userId, supabase]);
 
   if (loading) {
     return <div className="p-6 text-zinc-400 bg-zinc-900 rounded-xl border border-zinc-800 animate-pulse">Loading wealth trajectory...</div>;

@@ -36,24 +36,23 @@ The Elite Capital Engine is an automated financial telemetry and forensic auditi
 * **`lib/auth/require-user.ts`** — Session tenant derivation + admin allowlist.
 * **`lib/auth/require-entitlement.ts`** / **`lib/billing/subscription.ts`** — Active/trialing gate → 402 for product APIs + dashboard paywall.
 * **`lib/http/api-error.ts`** / **`lib/http/rate-limit.ts`** — Typed API errors + in-memory rate limits.
-* **`lib/plaid/classify.ts`** / **`lib/plaid/verify-webhook.ts`** — Deterministic PFC classify; JWT webhook verify.
+* **`lib/plaid/classify.ts`** / **`lib/plaid/verify-webhook.ts`** / **`lib/plaid/investments.ts`** — PFC classify; JWT webhook verify + durable receipts; investment tx sync helper.
+* **`lib/tax/brackets.ts`** — Single source for federal marginal bracket estimates (Day Zero, Settings, paystub vision).
 * **`lib/data/user-financials.ts`** — Shared tenant financial load for dashboard aggregates.
-* **`lib/analytics/*`** — Survival floor, wealth quota, intent helpers.
+* **`lib/analytics/*`** — Survival floor, wealth quota, intent helpers, category burn buckets, savings leak.
 
 ### UI components
 * **`components/TelemetryGrid.tsx`** — Liquidity, debt, burn, category distribution.
 * **`components/CapitalSimulator.tsx`** — Work-Backwards cascade / opportunity-cost simulator.
-* **`components/SettingsDrawer.tsx`** — Profile benchmarks + paystub ingestion UI.
-* **`components/PlaidLinkButton.tsx`** — Link token → exchange flow.
+* **`components/SettingsDrawer.tsx`** — Profile + paystub + Legal (billing portal, export JSON, delete account).
+* **`components/PlaidLinkButton.tsx`** — Link token → exchange; `standard` | `investment` modes with visible errors.
 * **`components/PayStubDropzone.tsx`** — Paystub upload → `/api/telemetry/vision`.
 * **`components/AuditChatDrawer.tsx`** — Forensic sparring chat UI.
 * **`components/DayZeroIntake.tsx`** — Onboarding intake when profile missing.
 * **`components/ManualLiabilityCard.tsx`** — Offline liability tracking.
 * **`components/Dashboard/CashFlowCreepChart.tsx`** — Fixed vs discretionary vs offense.
-* **`components/Dashboard/NetWorthTrendChart.tsx`** — Net worth trend (on disk; may be WIP wiring).
-* **`components/Dashboard/WealthMatrixChart.tsx`** — Macro projection UI (on disk; Week 4 polish still open).
-
-**Not built (do not claim Active):** `SavingsRatioCard`, `SubscriptionAuditCard`.
+* **`components/Dashboard/NetWorthTrendChart.tsx`** — Historical net worth from `historical_snapshots`.
+* **`components/Dashboard/WealthMatrixChart.tsx`** / **`SavingsRatioCard`** / **`SubscriptionAuditCard`** — FIRE matrix, savings ratio, leak heuristics.
 
 ### Application pages
 * **`app/page.tsx`** — Dashboard / Command Center orchestrator.
@@ -61,12 +60,13 @@ The Elite Capital Engine is an automated financial telemetry and forensic auditi
 * **`app/privacy/page.tsx`** / **`app/terms/page.tsx`** / **`app/about/page.tsx`** — Legal stubs + About hub (not counsel-reviewed).
 
 ### API routes — Active
-* **`app/api/profile/route.ts`** — Profile GET/POST.
+* **`app/api/profile/route.ts`** — Legacy profile GET (entitled); POST retired → setup/recalculate.
+* **`app/api/profile/setup/route.ts`** / **`app/api/profile/recalculate/route.ts`** — Day Zero + Settings mutations.
 * **`app/api/audit/route.ts`** / **`app/api/audit/chat/route.ts`** — Gemini audit + sparring (entitlement-gated).
-* **`app/api/plaid/create-link-token/route.ts`** — Link tokens.
+* **`app/api/plaid/create-link-token/route.ts`** — Link tokens (`standard` = Transactions; `investment` = Investments + Transactions).
 * **`app/api/plaid/exchange-token/route.ts`** — Public→access token; encrypt; upsert item/accounts.
 * **`app/api/plaid/sync-transactions/route.ts`** — Cursor delta sync + classify; default resume cursor.
-* **`app/api/plaid/webhook/route.ts`** — Signed webhook; sync only (no Gemini).
+* **`app/api/plaid/webhook/route.ts`** — Signed webhook; durable idempotency via `plaid_webhook_receipts`; sync only (no Gemini).
 * **`app/api/baseline/route.ts`** — Day-zero / baseline telemetry (**not** `telemetry/baseline`).
 * **`app/api/snapshot/route.ts`** — Snapshot writer (**not** `telemetry/snapshot`).
 * **`app/api/cron/nightly/route.ts`** — `CRON_SECRET`-gated nightly sync + snapshot (Vercel Cron).
@@ -77,7 +77,7 @@ The Elite Capital Engine is an automated financial telemetry and forensic auditi
 * **`app/api/telemetry/windfalls/route.ts`** — Capital windfalls API (on disk).
 * **`app/api/manual-accounts/route.ts`** — Manual liabilities API (on disk).
 * **`app/api/billing/checkout/route.ts`** / **`app/api/billing/webhook/route.ts`** / **`app/api/billing/portal/route.ts`** — Stripe Checkout, signed webhook, Customer Portal.
-* **`app/api/account/export/route.ts`** / **`app/api/account/delete/route.ts`** — Session-scoped export/delete.
+* **`app/api/account/export/route.ts`** / **`app/api/account/delete/route.ts`** — Session-scoped export/delete (includes sinking funds, liquidity events, manual txs, categorization rules).
 * **`app/api/admin/encrypt-existing-tokens/route.ts`** — Admin token encryption sweep.
 
 ### Removed / false paths (do not list as Active)

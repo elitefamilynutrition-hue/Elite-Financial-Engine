@@ -67,6 +67,7 @@ function DashboardContent() {
   const [subscriptionLeaks, setSubscriptionLeaks] = useState<SubscriptionLeakRow[]>([]);
   const [firePayload, setFirePayload] = useState<FireDashboardPayload | null>(null);
   const [excludeBusyId, setExcludeBusyId] = useState<string | null>(null);
+  const [dashboardError, setDashboardError] = useState<string | null>(null);
 
   const handleSignOut = async () => {
     await supabase.auth.signOut();
@@ -207,13 +208,26 @@ function DashboardContent() {
   const fetchDashboardData = async () => {
     try {
       const res = await fetch('/api/telemetry/dashboard');
+      const payload = await res.json().catch(() => ({}));
       if (!res.ok) {
-        console.error('Dashboard API status:', res.status);
+        const statusHint =
+          res.status === 401
+            ? 'Session expired — sign in again.'
+            : res.status === 402
+              ? 'Subscription required — start or renew your trial.'
+              : res.status === 429
+                ? 'Too many requests — wait a moment and retry.'
+                : payload.error || `Dashboard failed (${res.status}).`;
+        setDashboardError(statusHint);
+        console.error('Dashboard API status:', res.status, payload);
         return;
       }
-      const payload = await res.json();
-      if (payload.status !== 'SUCCESS') return;
+      if (payload.status !== 'SUCCESS') {
+        setDashboardError(payload.error || 'Dashboard returned an unexpected response.');
+        return;
+      }
 
+      setDashboardError(null);
       if (payload.user_id) setUserId(payload.user_id);
       setAccounts(payload.accounts || []);
       setTransactions(payload.recent_transactions || []);
@@ -229,6 +243,9 @@ function DashboardContent() {
       setFirePayload(payload.fire || null);
     } catch (error) {
       console.error('Failed to fetch dashboard data:', error);
+      setDashboardError(
+        error instanceof Error ? error.message : 'Network error loading dashboard.'
+      );
     }
   };
 
@@ -486,6 +503,23 @@ function DashboardContent() {
       )}
       
       <div className="max-w-6xl mx-auto space-y-10">
+        {dashboardError && (
+          <div
+            className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 rounded-lg border border-rose-900/50 bg-rose-950/30 px-4 py-3 text-sm text-rose-200"
+            role="alert"
+          >
+            <p>{dashboardError}</p>
+            <button
+              type="button"
+              onClick={() => {
+                void fetchDashboardData();
+              }}
+              className="shrink-0 bg-rose-800/60 hover:bg-rose-700/70 text-rose-50 font-semibold py-1.5 px-3 rounded-md transition text-xs"
+            >
+              Retry
+            </button>
+          </div>
+        )}
         <header className="flex flex-col md:flex-row md:justify-between md:items-center gap-4 border-b border-zinc-800 pb-6">
           <div>
             <h1 className="text-3xl font-bold tracking-tight text-white">Elite Capital Engine</h1>
@@ -712,19 +746,29 @@ function DashboardContent() {
             <ManualLiabilityCard />
             
             <section className="space-y-6">
-              <div className="flex justify-between items-end border-b border-zinc-800 pb-4">
+              <div className="flex flex-col sm:flex-row sm:justify-between sm:items-end gap-3 border-b border-zinc-800 pb-4">
                 <h2 className="text-lg font-semibold tracking-tight">Active Balance Sheet</h2>
-                <div className="text-right">
-                  <span className="text-xs text-zinc-400 uppercase tracking-wider block">Total Net Worth</span>
-                  <span className={`text-xl font-bold ${totalNetWorth >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
-                    ${totalNetWorth.toLocaleString('en-US', { minimumFractionDigits: 2 })}
-                  </span>
+                <div className="flex flex-wrap items-end gap-3">
+                  <PlaidLinkButton
+                    linkType="investment"
+                    buttonText="Connect Brokerage"
+                    onSuccessAction={() => {
+                      syncTransactions();
+                      fetchDashboardData();
+                    }}
+                  />
+                  <div className="text-right">
+                    <span className="text-xs text-zinc-400 uppercase tracking-wider block">Total Net Worth</span>
+                    <span className={`text-xl font-bold ${totalNetWorth >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
+                      ${totalNetWorth.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                    </span>
+                  </div>
                 </div>
               </div>
               
               {accounts.length === 0 ? (
                 <div className="border border-dashed border-zinc-800 rounded-xl p-8 text-center text-zinc-500">
-                  No accounts linked yet. Click &apos;Connect Bank Account&apos; to link via Plaid.
+                  No accounts linked yet. Click &apos;Connect Bank / Card&apos; to link via Plaid.
                 </div>
               ) : (
                 <div className="space-y-8">

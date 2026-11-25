@@ -15,6 +15,7 @@ const TENANT_TABLES = [
   'monthly_telemetry_snapshots',
   'amazon_rsu_schedule',
   'future_liquidity_events',
+  'sinking_funds',
   'financial_accounts',
   'manual_accounts',
   'user_custom_categorization_rules',

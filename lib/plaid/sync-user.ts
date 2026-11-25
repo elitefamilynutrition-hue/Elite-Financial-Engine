@@ -2,6 +2,7 @@ import { plaidClient } from '@/lib/plaid';
 import { getServiceSupabase } from '@/lib/supabase-admin';
 import { decryptToken } from '@/lib/crypto';
 import { classifyPlaidTransaction, toCategoryString } from '@/lib/plaid/classify';
+import { syncInvestmentTransactions } from '@/lib/plaid/investments';
 
 export interface SyncUserResult {
   user_id: string;
@@ -205,41 +206,17 @@ export async function syncUserTransactions(
       }
 
       try {
-        const endDate = new Date();
-        const startDate = new Date();
-        startDate.setDate(endDate.getDate() - 30);
-        const formatYYYYMMDD = (d: Date) => d.toISOString().split('T')[0];
-
-        const invRes = await plaidClient.investmentsTransactionsGet({
-          access_token: accessToken,
-          start_date: formatYYYYMMDD(startDate),
-          end_date: formatYYYYMMDD(endDate),
+        const invCount = await syncInvestmentTransactions({
+          accessToken,
+          userId: item.user_id,
+          itemId: item.item_id,
         });
-
-        const invTransactions = invRes.data.investment_transactions;
-        if (invTransactions.length > 0) {
-          const toUpsertInv = invTransactions.map((tx) => ({
-            user_id: item.user_id,
-            plaid_investment_transaction_id: tx.investment_transaction_id,
-            account_id: tx.account_id,
-            security_id: tx.security_id || null,
-            name: tx.name,
-            amount: tx.amount,
-            price: tx.price || null,
-            quantity: tx.quantity || null,
-            date: tx.date,
-            type: tx.type,
-            subtype: tx.subtype,
-          }));
-
-          const { error: invError } = await supabase
-            .from('investment_transactions')
-            .upsert(toUpsertInv, { onConflict: 'plaid_investment_transaction_id' });
-
-          if (!invError) totalInvestmentsAdded += invTransactions.length;
+        if (typeof invCount === 'number' && invCount > 0) {
+          totalInvestmentsAdded += invCount;
         }
-      } catch {
-        // Institution doesn't support investments
+      } catch (invErr: unknown) {
+        const msg = invErr instanceof Error ? invErr.message : 'Investment sync failed';
+        console.warn(`[Plaid Sync] Investment upsert failed for item ${item.item_id}:`, msg);
       }
 
       await supabase

@@ -1,6 +1,7 @@
 import { createHash, timingSafeEqual } from 'crypto';
 import { decodeProtectedHeader, importJWK, jwtVerify, type JWK } from 'jose';
 import { plaidClient } from '@/lib/plaid';
+import { getServiceSupabase } from '@/lib/supabase-admin';
 
 /**
  * Plaid webhook JWT verification (ES256 + body SHA-256).
@@ -10,9 +11,8 @@ import { plaidClient } from '@/lib/plaid';
 const jwkCache = new Map<string, JWK>();
 
 /**
- * Best-effort 24h idempotency. In-memory only — resets on cold start and is
- * not shared across multiple serverless instances. Prefer a
- * `plaid_webhook_receipts` table when schema migrations land (Day 4).
+ * Fast same-instance idempotency. Durable cross-instance claims go through
+ * `claimWebhookDeliveryDurable` → `plaid_webhook_receipts`.
  */
 const IDEMPOTENCY_TTL_MS = 24 * 60 * 60 * 1000;
 const recentDeliveries = new Map<string, number>();
@@ -37,6 +37,54 @@ export function claimWebhookDelivery(idempotencyKey: string): boolean {
   }
   recentDeliveries.set(idempotencyKey, Date.now());
   return true;
+}
+
+/**
+ * Prefer DB unique insert for cross-instance idempotency. Falls back to the
+ * in-memory map when the receipts table is missing or unreachable.
+ */
+export async function claimWebhookDeliveryDurable(
+  idempotencyKey: string,
+  meta?: {
+    itemId?: string | null;
+    webhookType?: string | null;
+    webhookCode?: string | null;
+  }
+): Promise<boolean> {
+  pruneExpiredDeliveries();
+  if (recentDeliveries.has(idempotencyKey)) {
+    return false;
+  }
+
+  try {
+    const supabase = getServiceSupabase();
+    const { error } = await supabase.from('plaid_webhook_receipts').insert({
+      idempotency_key: idempotencyKey,
+      item_id: meta?.itemId ?? null,
+      webhook_type: meta?.webhookType ?? null,
+      webhook_code: meta?.webhookCode ?? null,
+    });
+
+    if (!error) {
+      recentDeliveries.set(idempotencyKey, Date.now());
+      return true;
+    }
+
+    // Postgres unique_violation
+    if (error.code === '23505') {
+      recentDeliveries.set(idempotencyKey, Date.now());
+      return false;
+    }
+
+    console.warn('[plaid-webhook] durable receipt failed, using memory:', error.message);
+  } catch (err: unknown) {
+    console.warn(
+      '[plaid-webhook] durable receipt unavailable:',
+      err instanceof Error ? err.message : err
+    );
+  }
+
+  return claimWebhookDelivery(idempotencyKey);
 }
 
 function getPlaidVerificationHeader(headers: Headers): string | null {

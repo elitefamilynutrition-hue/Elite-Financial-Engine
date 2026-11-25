@@ -35,6 +35,10 @@ export class ApiError extends Error {
   static paymentRequired(message = 'An active subscription is required.') {
     return new ApiError(402, message, 'payment_required');
   }
+
+  static gone(message: string) {
+    return new ApiError(410, message, 'gone');
+  }
 }
 
 interface ErrorLike {

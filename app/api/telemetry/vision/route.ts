@@ -5,47 +5,7 @@ import { createServerSupabaseClient } from '@/lib/supabase-server';
 import { checkRateLimit, rateLimitResponse } from '@/lib/http/rate-limit';
 import { requireActiveSubscription } from '@/lib/auth/require-entitlement';
 import { toErrorResponse } from '@/lib/http/api-error';
-
-function calculateFederalMarginalBracket(
-  annualGross: number,
-  annualBonus: number,
-  annualPreTaxDeductions: number,
-  filingStatus: string
-): number {
-  const status = (filingStatus || 'Single').toLowerCase();
-  
-  // 2026 IRS Standard Deductions
-  let standardDeduction = 15000;
-  if (status.includes('joint') || status === 'married') {
-    standardDeduction = 30000;
-  } else if (status.includes('head')) {
-    standardDeduction = 22500;
-  }
-
-  const taxableIncome = Math.max(
-    0,
-    annualGross + annualBonus - annualPreTaxDeductions - standardDeduction
-  );
-
-  // 2026 Federal Statutory Brackets (Married Filing Jointly vs Single/HoH)
-  if (status.includes('joint') || status === 'married') {
-    if (taxableIncome > 751600) return 37;
-    if (taxableIncome > 501050) return 35;
-    if (taxableIncome > 394600) return 32;
-    if (taxableIncome > 206700) return 24;
-    if (taxableIncome > 96950) return 22;
-    if (taxableIncome > 23850) return 12;
-    return 10;
-  } else {
-    if (taxableIncome > 626350) return 37;
-    if (taxableIncome > 250525) return 35;
-    if (taxableIncome > 197300) return 32;
-    if (taxableIncome > 103350) return 24;
-    if (taxableIncome > 48475) return 22;
-    if (taxableIncome > 11925) return 12;
-    return 10;
-  }
-}
+import { calculateMarginalBracket } from '@/lib/tax/brackets';
 
 export async function POST(request: Request) {
   try {
@@ -217,12 +177,12 @@ Return ONLY valid JSON with these exact keys. If a date field is missing, defaul
       const annualGross = Number(userProfile.annual_gross_salary || 0) || (gross * periodsPerYear);
       const annualBonus = Number(userProfile.annual_bonus_target || 0);
 
-      const dynamicBracket = calculateFederalMarginalBracket(
+      const dynamicBracket = calculateMarginalBracket({
         annualGross,
         annualBonus,
         annualPreTaxDeductions,
-        userProfile.relationship_status || 'Single'
-      );
+        filingStatus: userProfile.relationship_status || 'Single',
+      });
 
       await supabase
         .from('user_financial_profiles')
