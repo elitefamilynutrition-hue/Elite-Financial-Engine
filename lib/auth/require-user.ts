@@ -1,6 +1,7 @@
 import type { User } from '@supabase/supabase-js';
 import { createServerSupabaseClient } from '@/lib/supabase-server';
 import { ApiError } from '@/lib/http/api-error';
+import { canAccessLab, isAdminEmail, isLabEnabled } from '@/lib/auth/admin';
 
 /**
  * The single source of truth for "who is calling this route".
@@ -28,14 +29,20 @@ export async function requireUser(): Promise<User> {
  * routes; everyone else gets a 403 even if they are signed in.
  */
 export function requireAdmin(user: User): void {
-  const allowlist = (process.env.ADMIN_EMAILS || '')
-    .split(',')
-    .map((email) => email.trim().toLowerCase())
-    .filter(Boolean);
-
-  const email = (user.email || '').toLowerCase();
-
-  if (allowlist.length === 0 || !allowlist.includes(email)) {
+  if (!isAdminEmail(user)) {
     throw ApiError.forbidden('Administrator access required.');
+  }
+}
+
+/**
+ * Operator Lab gate: ENABLE_LAB=true and ADMIN_EMAILS membership.
+ * Fail-closed when the flag is off (even for admins).
+ */
+export function requireLabAccess(user: User): void {
+  if (!isLabEnabled()) {
+    throw ApiError.notFound('Lab is disabled.');
+  }
+  if (!canAccessLab(user)) {
+    throw ApiError.forbidden('Lab access requires an administrator account.');
   }
 }

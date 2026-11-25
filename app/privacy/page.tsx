@@ -92,12 +92,12 @@ export default function PrivacyPage() {
             ← Back to app
           </Link>
           {' · '}
-          <Link href="/about" className="text-indigo-400 hover:text-indigo-300">
-            About
+          <Link href="/legal" className="text-indigo-400 hover:text-indigo-300">
+            Legal hub
           </Link>
           {' · '}
-          <Link href="/terms" className="text-indigo-400 hover:text-indigo-300">
-            Terms
+          <Link href="/contact" className="text-indigo-400 hover:text-indigo-300">
+            Contact
           </Link>
         </p>
       </div>

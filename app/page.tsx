@@ -69,6 +69,7 @@ function DashboardContent() {
   const [firePayload, setFirePayload] = useState<FireDashboardPayload | null>(null);
   const [excludeBusyId, setExcludeBusyId] = useState<string | null>(null);
   const [dashboardError, setDashboardError] = useState<string | null>(null);
+  const [labAllowed, setLabAllowed] = useState(false);
 
   const handleSignOut = async () => {
     await supabase.auth.signOut();
@@ -285,6 +286,26 @@ function DashboardContent() {
     if (hasSubscription) {
       fetchDashboardData();
     }
+  }, [hasSubscription]);
+
+  useEffect(() => {
+    if (!hasSubscription) {
+      setLabAllowed(false);
+      return;
+    }
+    let cancelled = false;
+    void (async () => {
+      try {
+        const res = await fetch('/api/lab/access');
+        const data = await res.json().catch(() => ({}));
+        if (!cancelled) setLabAllowed(Boolean(data.lab_allowed));
+      } catch {
+        if (!cancelled) setLabAllowed(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
   }, [hasSubscription]);
 
   const runGeminiAudit = async () => {
@@ -513,6 +534,14 @@ function DashboardContent() {
             <p className="text-zinc-400 text-sm">Automated sync and intelligent portfolio telemetry</p>
           </div>
           <div className="flex items-center gap-3 flex-wrap justify-end">
+            {labAllowed ? (
+              <Link
+                href="/lab"
+                className="bg-amber-950/40 hover:bg-amber-900/50 border border-amber-800/60 text-amber-200 font-semibold py-2.5 px-4 rounded-lg transition text-sm"
+              >
+                Lab
+              </Link>
+            ) : null}
             <button
               onClick={openBillingPortal}
               disabled={isOpeningPortal}

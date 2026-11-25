@@ -107,12 +107,12 @@ export default function TermsPage() {
             ← Back to app
           </Link>
           {' · '}
-          <Link href="/about" className="text-indigo-400 hover:text-indigo-300">
-            About
+          <Link href="/legal" className="text-indigo-400 hover:text-indigo-300">
+            Legal hub
           </Link>
           {' · '}
-          <Link href="/privacy" className="text-indigo-400 hover:text-indigo-300">
-            Privacy
+          <Link href="/contact" className="text-indigo-400 hover:text-indigo-300">
+            Contact
           </Link>
         </p>
       </div>
